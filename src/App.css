@@ -1,0 +1,19 @@
+/* Emergency styling 
+.bg-gray-50 { background-color: #f9fafb; }
+.bg-white { background-color: white; }
+.bg-blue-500 { background-color: #3b82f6; }
+.bg-green-500 { background-color: #10b981; }
+.text-white { color: white; }
+.p-4 { padding: 1rem; }
+.p-6 { padding: 1.5rem; }
+.rounded-lg { border-radius: 0.5rem; }
+.shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.grid { display: grid; }
+.flex { display: flex; }
+.font-bold { font-weight: bold; }
+.text-xl { font-size: 1.25rem; }
+.text-3xl { font-size: 1.875rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+.space-x-2 > * + * { margin-left: 0.5rem; }
+
+*/
