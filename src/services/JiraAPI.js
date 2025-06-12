@@ -90,6 +90,96 @@ class JiraAPI {
         }
     }
 
+    async createIssue(issueData) {
+        const response = await fetch(`${this.proxyURL}/issue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(issueData),
+        });
+
+        const responseData = await response.json();
+        if (!response.ok) {
+            const errorMessages = responseData.errors ? JSON.stringify(responseData.errors) : 'Unknown error';
+            throw new Error(`Failed to create issue: ${errorMessages}`);
+        }
+        return responseData;
+    }
+
+    async updateIssue(issueId, updatePayload) {
+        const response = await fetch(`${this.proxyURL}/issue/${issueId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload),
+        });
+
+        if (!response.ok && response.status !== 204) {
+            const errorText = await response.text();
+            throw new Error(`Failed to update issue: ${errorText}`);
+        }
+        // No body on successful PUT, so we don't return anything
+    }
+
+     async getAssignableUsers(projectKey) {
+        try {
+            const response = await fetch(`${this.proxyURL}/user/assignable/search?project=${projectKey}`);
+            if (!response.ok) {
+                throw new Error(`Failed to get assignable users: ${response.statusText}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching assignable users:', error);
+            throw error;
+        }
+    }
+
+    async getMe() {
+        try {
+            const response = await fetch(`${this.proxyURL}/myself`);
+            if (!response.ok) {
+                throw new Error(`Failed to get current user: ${response.statusText}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching current user:', error);
+            throw error;
+        }
+    }
+
+    async addComment(issueId, comment) {
+        const body = {
+            body: {
+                type: "doc",
+                version: 1,
+                content: [
+                    {
+                        type: "paragraph",
+                        content: [
+                            {
+                                type: "text",
+                                text: comment
+                            }
+                        ]
+                    }
+                ]
+            }
+        };
+
+        const response = await fetch(`${this.proxyURL}/issue/${issueId}/comment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to add comment: ${errorText}`);
+        }
+        return await response.json();
+    }
+
+
+
+
        transformJiraIssues(jiraIssues) {
         return jiraIssues.map(issue => {
             const fields = issue.fields;
@@ -165,7 +255,7 @@ class JiraAPI {
                 title: fields.summary,
                 assignee: fields.assignee ? fields.assignee.displayName : 'Unassigned',
                 assigneeEmail: fields.assignee ? fields.assignee.emailAddress : null,
-                status: fields.status.name,
+                status: fields.status ? fields.status.name : 'Unknown',
                 startDate: formatDate(createdDate), 
                 startTimestamp: fields.created,
                 lastUpdated: fields.updated,

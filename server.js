@@ -100,6 +100,102 @@ app.put('/api/jira/issue/:issueId', async (req, res) => {
   }
 });
 
+// Route to get assignable users for a project
+app.get('/api/jira/user/assignable/search', async (req, res) => {
+  try {
+    const { project } = req.query;
+    if (!project) {
+      return res.status(400).json({ error: 'Project key is required' });
+    }
+
+    const email = process.env.JIRA_EMAIL;
+    const token = process.env.JIRA_TOKEN;
+    const auth = Buffer.from(`${email}:${token}`).toString('base64');
+
+    const jiraUrl = `https://linemanwongnai.atlassian.net/rest/api/3/user/assignable/search?project=${project}`;
+    
+    const response = await fetch(jiraUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Proxy] Failed to get assignable users:`, errorText);
+      return res.status(response.status).send(errorText);
+    }
+
+    const users = await response.json();
+    res.json(users);
+  } catch (error) {
+    console.error('[Proxy] Error getting assignable users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route to get current user (myself)
+app.get('/api/jira/myself', async (req, res) => {
+  try {
+    const email = process.env.JIRA_EMAIL;
+    const token = process.env.JIRA_TOKEN;
+    const auth = Buffer.from(`${email}:${token}`).toString('base64');
+
+    const jiraUrl = `https://linemanwongnai.atlassian.net/rest/api/3/myself`;
+    
+    const response = await fetch(jiraUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Proxy] Failed to get current user:`, errorText);
+      return res.status(response.status).send(errorText);
+    }
+
+    const user = await response.json();
+    res.json(user);
+  } catch (error) {
+    console.error('[Proxy] Error getting current user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// EDITED: The route for creating an issue now only adds the default label
+app.post('/api/jira/issue', async (req, res) => {
+  const issuePayload = req.body; // Take the payload from frontend as is
+  console.log(`[Proxy] Forwarding request to create issue`);
+
+  try {
+    const apiResponse = await fetch(`${JIRA_BASE_URL}/rest/api/3/issue`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${Buffer.from(`${JIRA_API_USER}:${JIRA_API_TOKEN}`).toString('base64')}`,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(issuePayload)
+    });
+
+    const responseData = await apiResponse.json();
+    if (!apiResponse.ok) {
+      console.error(`[Proxy] Jira API Error:`, responseData);
+      return res.status(apiResponse.status).json(responseData);
+    }
+    res.status(apiResponse.status).json(responseData);
+
+  } catch (error) {
+    console.error('[Proxy] Internal Server Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = 4000; // หรือ Port ที่คุณใช้อยู่
 app.listen(PORT, (err) => {
   if (err) {

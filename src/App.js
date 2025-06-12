@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Filter, Search, RefreshCw, Settings, TrendingUp, Minimize2, Maximize2, Building, Tag, Zap } from 'lucide-react';
+import { Filter, Search, RefreshCw, Settings, TrendingUp, Minimize2, Maximize2, Building, Tag, Zap, PlusCircle } from 'lucide-react';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 // Import local dependencies
@@ -15,6 +15,7 @@ import TaskListDrawer from './components/TaskListDrawer';
 import AssigneeChartDrawer from './components/AssigneeChartDrawer';
 import LabelChartDrawer from './components/LabelChartDrawer';
 import ConfigModal from './components/ConfigModal';
+import CreateTaskModal from './components/CreateTaskModal';
 import Badge from './components/Badge';
 import TimeView from './components/TimeView';
 
@@ -36,11 +37,35 @@ function App() {
     const [selectedTask, setSelectedTask] = useState(null);
     const [isCompactMode, setIsCompactMode] = useState(false);
     const [showConfig, setShowConfig] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [currentDate] = useState(new Date());
     const [drawerState, setDrawerState] = useState({ isOpen: false, title: '', tasks: [] });
     const [assigneeChartDrawer, setAssigneeChartDrawer] = useState({ isOpen: false, assigneeName: '', tasks: [] });
     const [labelChartDrawer, setLabelChartDrawer] = useState({ isOpen: false, labelName: '', tasks: [] });
     const [isWorkingHours, setIsWorkingHours] = useState(false);
+
+    const [projectUsers, setProjectUsers] = useState([]);
+    const [currentUser, setCurrentUser] = useState(null);
+
+    // NEW: Effect to fetch user data once when connected
+    useEffect(() => {
+        if (isConnected && jiraConfig.projectKey) {
+            const fetchUsers = async () => {
+                try {
+                    const [users, me] = await Promise.all([
+                        jiraAPI.getAssignableUsers(jiraConfig.projectKey),
+                        jiraAPI.getMe()
+                    ]);
+                    setProjectUsers(users);
+                    setCurrentUser(me);
+                } catch (e) {
+                    console.error("Failed to fetch user data:", e);
+                }
+            };
+            fetchUsers();
+        }
+    }, [isConnected, jiraConfig.projectKey, jiraAPI]);
+
 
     useEffect(() => {
         const checkWorkingHours = () => {
@@ -56,67 +81,122 @@ function App() {
 
     const handleUpdateTask = async (taskId, updates) => {
         if (!isConnected) {
-            console.log("Mock update. Not connected to Jira.");
-            // ... Mock update logic can remain here for testing ...
+            const updatedTasks = allTasks.map(task => {
+                if (task.id === taskId) {
+                    const newComments = updates.comment ? [...task.comments, { author: "You (Demo)", body: `<p>${updates.comment}</p>`, created: new Date().toLocaleString(), createdTimestamp: new Date().toISOString() }] : task.comments;
+                    let newStatus = task.status;
+                    if (updates.statusId) {
+                        const availableStatuses = ['[BI] TO DO', '[BI] IN PROGRESS', '[BI] PENDING USER REVIEW', '[BI] DONE'];
+                        const currentIdx = availableStatuses.indexOf(task.status);
+                        newStatus = availableStatuses[(currentIdx + 1) % availableStatuses.length];
+                    }
+                    return { ...task, status: newStatus, priority: updates.priority || task.priority, biCategory: updates.biCategory || task.biCategory, comments: newComments, lastUpdated: new Date().toISOString() };
+                }
+                return task;
+            });
+            setAllTasks(updatedTasks);
+            if (selectedTask && selectedTask.id === taskId) {
+                const updatedTask = updatedTasks.find(t => t.id === taskId);
+                setSelectedTask(updatedTask);
+            }
+            setTimeout(() => setSelectedTask(null), 500);
             return;
         }
-        
         try {
             const { statusId, comment, priority, biCategory } = updates;
-
-            // --- Part 1: Handle field updates and comments together ---
-            const updatePayload = {};
-            const fieldsToSet = {};
-            const fieldsToUpdate = {};
-
-            // Prepare simple field updates
-            if (priority) {
-                fieldsToSet.priority = { name: priority };
+            const fieldsPayload = {};
+            if (priority) { fieldsPayload.priority = { name: priority }; }
+            if (biCategory) { fieldsPayload.customfield_10307 = { value: biCategory }; }
+            if (Object.keys(fieldsPayload).length > 0) {
+                await jiraAPI.updateIssue(taskId, { fields: fieldsPayload });
             }
-            if (biCategory) {
-                fieldsToSet.customfield_10307 = { value: biCategory };
-            }
-
-            // Prepare verb-based updates (like adding a comment)
-            if (comment) {
-                fieldsToUpdate.comment = [{ 
-                    add: { 
-                        body: {
-                            type: 'doc', version: 1,
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: comment }] }]
-                        } 
-                    } 
-                }];
-            }
-
-            // Combine into a single payload for the PUT request
-            if (Object.keys(fieldsToSet).length > 0) {
-                updatePayload.fields = fieldsToSet;
-            }
-            if (Object.keys(fieldsToUpdate).length > 0) {
-                updatePayload.update = fieldsToUpdate;
-            }
-
-            // Make the single update call if there's anything to update
-            if (Object.keys(updatePayload).length > 0) {
-                await jiraAPI.updateIssue(taskId, updatePayload);
-            }
-
-            // --- Part 2: Handle status transition separately (as required by Jira) ---
-            if (statusId) {
-                await jiraAPI.transitionIssue(taskId, statusId);
-            }
-            
-            // --- Part 3: Reload all data to reflect changes ---
+            if (statusId) { await jiraAPI.transitionIssue(taskId, statusId); }
+            if (comment) { await jiraAPI.addComment(taskId, comment); }
             await loadJiraData();
             setSelectedTask(null);
-
         } catch (err) {
             console.error("Failed to update task:", err);
-            // This re-throw is important for the drawer to catch and display the error
             throw err;
         }
     };
+
+        const staticBiCategoriesForCreate = [
+        'Product Spec. Tracking [D]',
+        'Product Analysis [D]',
+        'Product Report/Ad-Hoc [D]',
+        'Product Investigation [D]',
+        'Initiation/Idea [D]',
+        'Others [CO]'
+    ];
+
+const handleCreateTask = async (issueData) => {
+    if (!isConnected) {
+        alert("Cannot create task in disconnected mode.");
+        throw new Error("Disconnected");
+    }
+    try {
+        // The modal now prepares the full payload, just send it.
+        const createdTaskResponse = await jiraAPI.createIssue(issueData);
+        console.log('Task created successfully:', createdTaskResponse);
+        
+        // Store the original description to update later
+        const originalDescription = issueData.fields.description;
+        const createdIssueKey = createdTaskResponse.key;
+        
+        // Refresh data to see the new task
+        await loadJiraData();
+        
+        // Close the create modal
+        setIsCreateModalOpen(false);
+        
+        // Open drawer immediately
+        setTimeout(() => {
+            const tasks = allTasks;
+            const newTask = tasks.find(task => task.id === createdIssueKey);
+            if (newTask) {
+                console.log('Opening task detail drawer for:', createdIssueKey);
+                setSelectedTask(newTask);
+            } else {
+                console.warn('Could not find newly created task in allTasks');
+                // If not found, still try to open with basic info
+                setSelectedTask({
+                    id: createdIssueKey,
+                    title: issueData.fields.summary,
+                    description: '', // Will be updated later
+                    status: '[BI] OPEN',
+                    assignee: 'Loading...'
+                });
+            }
+        }, 500); // Small delay to ensure modal is closed
+        
+        // WORKAROUND: Update description after 10 seconds to bypass automation
+        if (originalDescription?.content?.[0]?.content?.[0]?.text) {
+            console.log(`Scheduling description update for ${createdIssueKey} in 10 seconds...`);
+            
+            setTimeout(async () => {
+                console.log(`Now updating description for ${createdIssueKey}...`);
+                try {
+                    await jiraAPI.updateIssue(createdIssueKey, {
+                        fields: {
+                            description: originalDescription
+                        }
+                    });
+                    console.log(`✅ Successfully updated description for ${createdIssueKey}`);
+                    
+                    // Refresh data to show updated description
+                    await loadJiraData();
+                    
+                } catch (updateError) {
+                    console.error("❌ Failed to update description after delay:", updateError);
+                }
+            }, 10000); // 10 seconds delay
+        }
+
+    } catch (err) {
+        console.error("Failed to create task:", err);
+        throw err;
+    }
+};
 
     const openDrawer = (title, tasks) => setDrawerState({ isOpen: true, title, tasks });
     const closeDrawer = () => setDrawerState({ isOpen: false, title: '', tasks: [] });
@@ -125,8 +205,59 @@ function App() {
     const openLabelChartDrawer = (labelName, tasks) => setLabelChartDrawer({ isOpen: true, labelName, tasks });
     const closeLabelChartDrawer = () => setLabelChartDrawer({ isOpen: false, labelName: '', tasks: [] });
     
+    // NEW: Effect to fetch user data once when connected
     useEffect(() => {
-        const isAnyDrawerOpen = drawerState.isOpen || !!selectedTask || assigneeChartDrawer.isOpen || labelChartDrawer.isOpen;
+        if (isConnected && jiraConfig.projectKey) {
+            const fetchUsers = async () => {
+                try {
+                    const [users, me] = await Promise.all([
+                        jiraAPI.getAssignableUsers(jiraConfig.projectKey),
+                        jiraAPI.getMe()
+                    ]);
+                    
+                    // Define Business Intelligence team members (can be moved to config later)
+                    const biTeamEmails = [
+                        'sorawee.p@lmwn.com',
+                        'tanyapat.m@lmwn.com',
+                        // Add more BI team members here
+                    ];
+                    
+                    // Filter users based on:
+                    // 1. They are in the BI team email list OR
+                    // 2. They have worked on Business Intelligence tasks OR
+                    // 3. They are the current user
+                    const biUsers = users.filter(user => {
+                        // Check if in BI team list
+                        if (biTeamEmails.includes(user.emailAddress)) return true;
+                        
+                        // Check if current user
+                        if (user.emailAddress === me.emailAddress) return true;
+                        
+                        // Check if has BI department tasks
+                        const userTasks = allTasks.filter(task => 
+                            task.assigneeEmail === user.emailAddress && 
+                            task.department === 'Business Intelligence'
+                        );
+                        return userTasks.length > 0;
+                    });
+                    
+                    // Sort by displayName
+                    biUsers.sort((a, b) => a.displayName.localeCompare(b.displayName));
+                    
+                    setProjectUsers(biUsers);
+                    setCurrentUser(me);
+                    
+                    console.log(`Filtered ${biUsers.length} BI team members from ${users.length} total users`);
+                } catch (e) {
+                    console.error("Failed to fetch user data:", e);
+                }
+            };
+            fetchUsers();
+        }
+    }, [isConnected, jiraConfig.projectKey, jiraAPI, allTasks]);
+
+    useEffect(() => {
+        const isAnyDrawerOpen = drawerState.isOpen || !!selectedTask || assigneeChartDrawer.isOpen || labelChartDrawer.isOpen || isCreateModalOpen;
         if (isAnyDrawerOpen) {
             const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
             document.body.style.overflow = 'hidden';
@@ -139,7 +270,7 @@ function App() {
             document.body.style.overflow = 'auto';
             document.body.style.paddingRight = '0';
         };
-    }, [drawerState.isOpen, selectedTask, assigneeChartDrawer.isOpen, labelChartDrawer.isOpen]);
+    }, [drawerState.isOpen, selectedTask, assigneeChartDrawer.isOpen, labelChartDrawer.isOpen, isCreateModalOpen]);
 
     useEffect(() => {
         let filtered = [...allTasks];
@@ -175,7 +306,6 @@ function App() {
             if (orderA !== orderB) {
                 return orderA - orderB;
             }
-
             if (orderA === 3) {
                 const dateA = new Date(a.lastUpdated);
                 const dateB = new Date(b.lastUpdated);
@@ -187,7 +317,6 @@ function App() {
                 if (priorityA !== priorityB) {
                     return priorityA - priorityB;
                 }
-
                 const dateA = a.dueDate ? parseDate(a.dueDate) : null;
                 const dateB = b.dueDate ? parseDate(b.dueDate) : null;
                 if (dateA && !dateB) return -1;
@@ -195,7 +324,6 @@ function App() {
                 if (dateA && dateB && dateA.getTime() !== dateB.getTime()) {
                     return dateA - dateB;
                 }
-
                 const isA_Overdue = dateA ? today > dateA : false;
                 const isB_Overdue = dateB ? today > dateB : false;
                 if (isA_Overdue !== isB_Overdue) {
@@ -209,7 +337,7 @@ function App() {
     
     const { assigneeColors, uniqueAssignees, allStatuses, allDepartments, allLabels, allBiCategories, departmentColors, biCategoryColors } = useMemo(() => {
         const dataToProcess = allTasks;
-        const uniqueAssignees = [...new Set(dataToProcess.map(task => task.assignee).filter(Boolean))].sort();
+        const uniqueAssignees = [...new Set(allTasks.map(task => task.assignee).filter(Boolean))].sort();
         const allStatuses = [...new Set(dataToProcess.map(t => t.status))].sort();
         const allDepartments = [...new Set(dataToProcess.map(t => t.department).filter(Boolean))].sort();
         const allLabels = [...new Set(dataToProcess.flatMap(t => t.labels || []))].filter(Boolean).sort();
@@ -229,11 +357,9 @@ function App() {
 
     const dailyWorkloadData = useMemo(() => {
         const dataToProcess = allTasks;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
         const todayStr = today.toISOString().split('T')[0];
-        const chartStartDate = new Date();
-        chartStartDate.setMonth(chartStartDate.getMonth() - 3);
+        const chartStartDate = new Date(); chartStartDate.setMonth(chartStartDate.getMonth() - 3);
         const chartEndDate = new Date();
         const data = [];
         let keys, colors;
@@ -241,23 +367,19 @@ function App() {
         else if (workloadView === 'department') { keys = allDepartments; colors = departmentColors; } 
         else { keys = allBiCategories; colors = biCategoryColors; }
         for (let d = new Date(chartStartDate); d <= chartEndDate; d.setDate(d.getDate() + 1)) {
-            const currentDateIter = new Date(d);
-            currentDateIter.setHours(0, 0, 0, 0);
+            const currentDateIter = new Date(d); currentDateIter.setHours(0, 0, 0, 0);
             const dayData = { date: currentDateIter.toISOString().split('T')[0], displayDate: currentDateIter.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
             keys.forEach(key => {
-                const count = dataToProcess.filter(task => {
+                dayData[key] = dataToProcess.filter(task => {
                     if (filters.assignee.length > 0 && !filters.assignee.includes(task.assignee)) return false;
                     const groupKey = workloadView === 'assignee' ? task.assignee : (workloadView === 'department' ? task.department : task.biCategory);
                     if (groupKey !== key) return false;
                     const taskStartDate = parseDate(task.startDate);
                     if (!taskStartDate || currentDateIter < taskStartDate) return false;
                     const isResolved = task.status.toLowerCase().includes('done') || task.status.toLowerCase().includes('cancelled');
-                    if (isResolved) {
-                        const taskResolutionDate = parseDate(task.resolutiondate);
-                        return taskResolutionDate && currentDateIter <= taskResolutionDate;
-                    } else { return true; }
+                    if (isResolved) { const taskResolutionDate = parseDate(task.resolutiondate); return taskResolutionDate && currentDateIter <= taskResolutionDate; } 
+                    else { return true; }
                 }).length;
-                dayData[key] = count;
             });
             data.push(dayData);
         }
@@ -271,8 +393,7 @@ function App() {
             if (!acc[assignee]) acc[assignee] = { total: 0, completed: 0, storyPoints: 0, email: task.assigneeEmail };
             acc[assignee].total++;
             acc[assignee].storyPoints += task.storyPoints || 0;
-            const statusText = task.status.toLowerCase();
-            if (statusText.includes('done') || statusText.includes('cancelled')) acc[assignee].completed++;
+            if (task.status.toLowerCase().includes('done') || task.status.toLowerCase().includes('cancelled')) acc[assignee].completed++;
             return acc;
         }, {});
         return Object.entries(workload).sort(([a], [b]) => a.localeCompare(b));
@@ -315,9 +436,7 @@ function App() {
         });
         return Object.entries(hierarchy).map(([deptName, deptData]) => {
             const labels = Object.entries(deptData.labels).map(([labelName, labelData]) => {
-                const categories = Object.entries(labelData.categories).map(([catName, catData]) => ({
-                    name: catName, tasks: catData.tasks, taskCount: catData.tasks.length
-                })).sort((a, b) => b.taskCount - a.taskCount);
+                const categories = Object.entries(labelData.categories).map(([catName, catData]) => ({ name: catName, tasks: catData.tasks, taskCount: catData.tasks.length })).sort((a, b) => b.taskCount - a.taskCount);
                 return { name: labelName, categories: categories, taskCount: categories.reduce((sum, cat) => sum + cat.taskCount, 0) };
             }).sort((a, b) => b.taskCount - a.taskCount);
             return { name: deptName, labels: labels, taskCount: labels.reduce((sum, label) => sum + label.taskCount, 0) };
@@ -344,9 +463,7 @@ function App() {
         return Object.entries(hierarchy).map(([assigneeName, assigneeData]) => {
             const depts = Object.entries(assigneeData.depts).map(([deptName, deptData]) => {
                 const labels = Object.entries(deptData.labels).map(([labelName, labelData]) => {
-                    const categories = Object.entries(labelData.categories).map(([catName, catData]) => ({
-                        name: catName, tasks: catData.tasks, taskCount: catData.tasks.length
-                    })).sort((a, b) => b.taskCount - a.taskCount);
+                    const categories = Object.entries(labelData.categories).map(([catName, catData]) => ({ name: catName, tasks: catData.tasks, taskCount: catData.tasks.length })).sort((a, b) => b.taskCount - a.taskCount);
                     return { name: labelName, categories, taskCount: categories.reduce((sum, cat) => sum + cat.taskCount, 0) };
                 }).sort((a, b) => b.taskCount - a.taskCount);
                 return { name: deptName, labels, taskCount: labels.reduce((sum, label) => sum + label.taskCount, 0) };
@@ -418,50 +535,12 @@ function App() {
             if (s.includes('done') || s.includes('cancel')) return 3;
             return 4; 
         };
-        return new Map(Object.entries(grouped).sort(([statusA], [statusB]) => {
-            return getStatusOrder(statusA) - getStatusOrder(statusB);
-        }));
+        return new Map(Object.entries(grouped).sort(([statusA], [statusB]) => getStatusOrder(statusA) - getStatusOrder(statusB)));
     }, [tasks]);
 
     const TeamView = () => ( <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">{ groupedByTeam.map(([person, {tasks: personTasks, email}]) => ( <div key={person} className="bg-white rounded-lg shadow overflow-hidden flex flex-col"><div className="p-4 border-b flex items-center space-x-3"><span className="w-4 h-4 rounded-full" style={{backgroundColor: assigneeColors[person]}}></span><h3 className="text-lg font-semibold">{formatAssigneeName(person, email)}<span className="ml-2 text-sm text-gray-500">({personTasks.length} tasks)</span></h3></div><div className="p-4 space-y-3 flex-grow overflow-y-auto" style={{maxHeight: '24rem'}}>{personTasks.slice(0, 5).map(task => (<div key={task.id} className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setSelectedTask(task)}><p className="text-sm text-gray-900 mb-2 font-medium">{task.title}</p><div className="flex justify-between items-center text-xs text-gray-500"><div className="flex items-center flex-wrap gap-2"><Badge type="priority" task={task} /><Badge type="timeliness" task={task} /><Badge type="status" task={task} /></div><span className="text-xs text-gray-500">{task.storyPoints || 0} pts</span></div></div>))}{personTasks.length > 5 && (<div className="text-center text-sm text-blue-600 pt-2 cursor-pointer" onClick={() => openDrawer(`${formatAssigneeName(person, email)}'s Tasks`, personTasks)}>View all {personTasks.length} tasks...</div>)}</div></div>))}</div> );
     
-    const StatusColumn = ({ title, tasks = [], onTaskClick, openDrawer, assigneeColors }) => (
-        <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col">
-            <div className={`p-4 border-b flex items-center space-x-3 ${getStatusColor(title).replace('bg-green-100', 'bg-green-200').replace('bg-blue-100', 'bg-blue-200')}`}>
-                <h3 className="text-lg font-semibold">{title}
-                    <span className="ml-2 text-sm font-normal text-gray-700">({tasks.length} tasks)</span>
-                </h3>
-            </div>
-            <div className="p-4 space-y-3 flex-grow overflow-y-auto" style={{ height: '40rem' }}>
-                {tasks.length === 0 ? (
-                     <p className="text-gray-500 text-center pt-10">No tasks in this status.</p>
-                ) : (
-                    tasks.slice(0, 100).map(task => (
-                        <div key={task.id} className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setSelectedTask(task)}>
-                            <p className="text-sm font-medium text-gray-900 mb-2 truncate" title={task.title}>{task.title}</p>
-                            <div className="mt-2 pt-2 border-t border-gray-100">
-                                <div className="flex justify-between items-center text-xs text-gray-500">
-                                    <div className="flex items-center gap-1.5 truncate">
-                                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: assigneeColors[task.assignee] }}></span>
-                                        <span className="truncate">{formatAssigneeName(task.assignee, task.assigneeEmail)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        <Badge type="timeliness" task={task} />
-                                        <Badge type="priority" task={task} />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                )}
-                {tasks.length > 100 && (
-                    <div className="text-center text-sm text-blue-600 pt-2 cursor-pointer" onClick={() => openDrawer(`Status: ${title}`, tasks)}>
-                        View all {tasks.length} tasks...
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+    const StatusColumn = ({ title, tasks = [], onTaskClick, assigneeColors }) => ( <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col"><div className={`p-4 border-b flex items-center space-x-3 ${getStatusColor(title)}`}><h3 className="text-lg font-semibold">{title}<span className="ml-2 text-sm font-normal text-gray-700">({tasks.length} tasks)</span></h3></div><div className="p-4 space-y-3 flex-grow overflow-y-auto" style={{ height: '40rem' }}>{tasks.length === 0 ? ( <p className="text-gray-500 text-center pt-10">No tasks in this status.</p>) : (tasks.map(task => (<div key={task.id} className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setSelectedTask(task)}><p className="text-sm font-medium text-gray-900 mb-2 truncate" title={task.title}>{task.title}</p><div className="mt-2 pt-2 border-t border-gray-100"><div className="flex justify-between items-center text-xs text-gray-500"><div className="flex items-center gap-1.5 truncate"><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: assigneeColors[task.assignee] }}></span><span className="truncate">{formatAssigneeName(task.assignee, task.assigneeEmail)}</span></div><div className="flex items-center gap-1 flex-shrink-0"><Badge type="timeliness" task={task} /><Badge type="priority" task={task} /></div></div></div></div>)))} </div></div> );
 
     return (
         <div className="p-4 md:p-6 bg-gray-50 text-gray-900 min-h-screen">
@@ -485,7 +564,11 @@ function App() {
                         )}
                         {error && <div className="mt-2 p-3 bg-red-100 text-red-800 rounded text-sm break-all">⚠️ **Error:** {error}</div>}
                     </div>
-                    <div className="flex space-x-2 flex-shrink-0">
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                        <button onClick={() => setIsCreateModalOpen(true)} className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 flex items-center space-x-2">
+                            <PlusCircle className="w-4 h-4" />
+                            <span>Create Task</span>
+                        </button>
                         <button onClick={() => loadJiraData(false)} disabled={loading} className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /><span>Refresh</span></button>
                         <button onClick={() => setShowConfig(true)} className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 flex items-center space-x-2"><Settings className="w-4 h-4" /><span>Config</span></button>
                     </div>
@@ -593,11 +676,11 @@ function App() {
                         <button onClick={() => setViewMode('gantt')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'gantt' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>Gantt</button>
                         <button onClick={() => setViewMode('time')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'time' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Time</button>
                         <button onClick={() => setViewMode('status')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'status' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Status</button>
+                        <button onClick={() => setViewMode('assignee-source')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'assignee-source' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Assignee Source</button>
+                        <button onClick={() => setViewMode('source')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'source' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Dept. Source</button>
                         <button onClick={() => setViewMode('team')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'team' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Team</button>
                         <button onClick={() => setViewMode('department')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'department' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Department</button>
                         <button onClick={() => setViewMode('biCategory')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'biCategory' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By BI Category</button>
-                        <button onClick={() => setViewMode('assignee-source')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'assignee-source' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Assignee Source</button>
-                        <button onClick={() => setViewMode('source')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'source' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Dept. Source</button>
                         <button onClick={() => setViewMode('label')} className={`px-3 py-2 rounded-md transition-colors text-sm ${viewMode === 'label' ? 'bg-blue-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>By Label</button>
                     </div>
                     {viewMode === 'gantt' && (<button onClick={() => setIsCompactMode(!isCompactMode)} title={isCompactMode ? 'Default View' : 'Compact View'} className="p-2 rounded-md transition-colors text-sm text-gray-600 bg-white shadow hover:bg-gray-200">{isCompactMode ? <Maximize2 className="w-5 h-5" /> : <Minimize2 className="w-5 h-5" />}</button>)}
@@ -614,21 +697,23 @@ function App() {
                 {viewMode === 'assignee-source' && (<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">{assigneeSourceData.map(assignee => (<div key={assignee.name} className="bg-white rounded-lg shadow flex flex-col"><h3 className="p-4 border-b text-lg font-semibold flex items-center space-x-3 cursor-pointer hover:bg-gray-50" onClick={() => openAssigneeChartDrawer(assignee.name, tasks.filter(t => (t.assignee || 'Unassigned') === assignee.name))}><span className="w-4 h-4 rounded-full" style={{ backgroundColor: assigneeColors[assignee.name] }}></span><span>{formatAssigneeName(assignee.name, assignee.email)}</span><span className="ml-3 text-base font-normal text-gray-500">({assignee.taskCount} tasks)</span></h3><div className="p-4 space-y-4 flex-grow overflow-y-auto" style={{maxHeight: '32rem'}}>{assignee.depts.map(dept => (<div key={dept.name} className="pl-4"> <div className="flex items-center space-x-3 mb-2"><Building className="w-4 h-4 text-gray-600" /><h4 className="font-semibold">{dept.name} <span className="font-normal text-gray-600">({dept.taskCount} tasks)</span></h4></div>{dept.labels.map(label => (<div key={label.name} className="pl-8 border-l-2 ml-2"><div className="flex items-center space-x-3 mb-2"><Tag className="w-4 h-4 text-gray-500" /><h5 className="font-medium">{label.name} <span className="font-normal text-gray-500">({label.taskCount} tasks)</span></h5></div><div className="pl-6 space-y-1 text-sm">{label.categories.map(cat => (<div key={cat.name} className="flex justify-between items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer" onClick={() => openDrawer(`${assignee.name} > ${dept.name} > ${label.name} > ${cat.name}`, cat.tasks)}><div className="flex items-center space-x-2"><span className="w-3 h-3 rounded-full" style={{ backgroundColor: biCategoryColors[cat.name] }}></span><span>{cat.name}</span></div><span className="text-gray-600">{cat.taskCount} tasks</span></div>))}</div></div>))}</div>))}</div></div>))}</div>)}
             </main>
             
-            <TaskDetailDrawer 
-                task={selectedTask} 
-                onClose={() => setSelectedTask(null)} 
-                assigneeColors={assigneeColors} 
-                biCategoryColors={biCategoryColors} 
-                departmentColors={departmentColors} 
-                onUpdateTask={handleUpdateTask} 
-                jiraAPI={jiraAPI} 
-                isConnected={isConnected}
-                allBiCategories={allBiCategories}
-            />
+            <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onUpdateTask={handleUpdateTask} jiraAPI={jiraAPI} isConnected={isConnected} allBiCategories={allBiCategories} />
             <TaskListDrawer isOpen={drawerState.isOpen} onClose={closeDrawer} title={drawerState.title} tasks={drawerState.tasks} onTaskClick={(task) => { setSelectedTask(task); closeDrawer(); }}/>
             <AssigneeChartDrawer isOpen={assigneeChartDrawer.isOpen} onClose={closeAssigneeChartDrawer} assigneeName={assigneeChartDrawer.assigneeName} tasks={assigneeChartDrawer.tasks} departmentColors={departmentColors} biCategoryColors={biCategoryColors} onTaskClick={(task) => { closeAssigneeChartDrawer(); setSelectedTask(task); }}/>
             <LabelChartDrawer isOpen={labelChartDrawer.isOpen} onClose={closeLabelChartDrawer} labelName={labelChartDrawer.labelName} tasks={labelChartDrawer.tasks} biCategoryColors={biCategoryColors} onTaskClick={(task) => { closeLabelChartDrawer(); setSelectedTask(task); }}/>
             <ConfigModal isOpen={showConfig} onClose={() => setShowConfig(false)} jiraConfig={jiraConfig} saveJiraConfig={saveJiraConfig} isConnected={isConnected} />
+            <CreateTaskModal 
+                isOpen={isCreateModalOpen} 
+                onClose={() => setIsCreateModalOpen(false)} 
+                onSubmit={handleCreateTask}
+                projectKey={jiraConfig.projectKey}
+                // Pass the current user's full object to the modal
+                currentUser={currentUser} 
+                // Pass the list of assignable users (assuming useJira provides it)
+                assignableUsers={projectUsers}
+                departmentOptions={allDepartments}
+                biCategoryOptions={staticBiCategoriesForCreate}
+            />
         </div>
     );
 }
