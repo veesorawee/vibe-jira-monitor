@@ -25,13 +25,36 @@ class JiraAPI {
             const expand = 'changelog';
 
             let allIssues = [];
-            let startAt = 0;
+            let nextPageToken = null; 
             const maxResults = 100;
-            let total = 0;
+            
             do {
-                const response = await fetch(
-                    `${this.proxyURL}/search?jql=${encodeURIComponent(jql)}&fields=${fields}&expand=${expand}&startAt=${startAt}&maxResults=${maxResults}`
-                );
+        
+                const payload = {
+                    jql: jql,
+                    fields: [
+                        'summary', 'assignee', 'status', 'created', 'updated', 
+                        'duedate', 'priority', 'description', 'comment', 
+                        'customfield_10016', 'resolutiondate', 'labels', 
+                        'customfield_10306', 'customfield_10307'
+                    ],
+                    expand: 'changelog',
+                    maxResults: maxResults
+                };
+
+          
+                if (nextPageToken) {
+                    payload.nextPageToken = nextPageToken;
+                }
+
+                const response = await fetch(`${this.proxyURL}/search/jql`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
                 if (!response.ok) {
                     let errorBody;
                     try { errorBody = await response.json(); }
@@ -39,11 +62,14 @@ class JiraAPI {
                     const errorMessage = errorBody?.errorMessages?.join(', ') || JSON.stringify(errorBody);
                     throw new Error(`Jira API Error (${response.status}): ${errorMessage}`);
                 }
+                
                 const data = await response.json();
-                allIssues = allIssues.concat(data.issues);
-                total = data.total;
-                startAt += maxResults;
-            } while (allIssues.length < total);
+                allIssues = allIssues.concat(data.issues || []);
+                
+   
+                nextPageToken = data.nextPageToken;
+
+            } while (nextPageToken);
             return this.transformJiraIssues(allIssues);
         } catch (error) {
             console.error('Error fetching Jira issues via proxy:', error);
@@ -121,7 +147,9 @@ class JiraAPI {
 
      async getAssignableUsers(projectKey) {
         try {
-            const response = await fetch(`${this.proxyURL}/user/assignable/search?project=${projectKey}`);
+            // 🚀 แก้ไขบรรทัดนี้ เติม &maxResults=1000 เข้าไปข้างหลังสุด
+            const response = await fetch(`${this.proxyURL}/user/assignable/search?project=${projectKey}&maxResults=1000`);
+            
             if (!response.ok) {
                 throw new Error(`Failed to get assignable users: ${response.statusText}`);
             }
@@ -273,6 +301,9 @@ class JiraAPI {
                 comments: fields.comment ? this.transformComments(fields.comment.comments) : [],
                 lastUpdateDetail: lastUpdateDetail,
                 fullChangeHistory: fullChangeHistory,
+                created: issue.fields.created,
+        updated: issue.fields.updated,
+        resolutiondate: issue.fields.resolutiondate,
             };
         });
     }

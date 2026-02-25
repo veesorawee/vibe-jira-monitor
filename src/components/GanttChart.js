@@ -18,12 +18,12 @@ const addWorkingDays = (startDate, daysToAdd) => {
     return newDate;
 };
 
-
 const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assigneeColors, currentDate }) => {
     const dayWidth = 30;
     const taskColumnWidth = 300;
     const ganttRef = useRef(null);
 
+    // 1. จัดการ Scroll ครั้งแรก
     useEffect(() => {
         const ganttContainer = ganttRef.current;
         if (!ganttContainer || !minDate) return;
@@ -36,8 +36,9 @@ const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assig
             const scrollTarget = (todayIndex * dayWidth) - (ganttContainer.clientWidth / 2) + (dayWidth / 2);
             ganttContainer.scrollLeft = scrollTarget;
         }
-    }, [minDate, tasks]);
+    }, [minDate, tasks.length]); // เปลี่ยนเป็น tasks.length เพื่อไม่ให้มันแย่ง scroll เวลาข้อมูลอัปเดตเล็กน้อย
 
+    // 2. คำนวณหัวตาราง (วันที่และเดือน) แค่ตอนที่ minDate/maxDate เปลี่ยน
     const { dates, monthHeaders } = useMemo(() => {
         if (!minDate || !maxDate) return { dates: [], monthHeaders: [] };
         const dateArr = [];
@@ -59,43 +60,61 @@ const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assig
     }, [minDate, maxDate]);
 
     const timelineWidth = dates.length * dayWidth;
+    const currentDateStr = currentDate.toDateString();
 
-    const getTaskBarStyle = (task) => {
-        const startDate = parseDate(task.startDate);
-        if (!startDate || !minDate) return { display: 'none' };
-        
-        let endDate;
-        const status = (task.status || '').toLowerCase();
-        const isCompleted = status.includes('done') || status.includes('cancelled');
+    // 🚀 3. PERFORMANCE FIX: คำนวณ Style และตำแหน่งของการ์ด "ล่วงหน้า" แค่ครั้งเดียว
+    const processedTasks = useMemo(() => {
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-        if (isCompleted) {
-            const resolutionDate = parseDate(task.resolutiondate);
-            endDate = resolutionDate ? resolutionDate : new Date(task.lastUpdated);
-        } else {
+        return tasks.map(task => {
+            let style = { display: 'none' };
+            let dueDay = -1;
+
+            const startDate = parseDate(task.startDate);
             const dueDate = parseDate(task.dueDate);
-            if (dueDate) {
-                endDate = today;
-            } else {
-                const defaultEndDate = new Date(startDate);
-                defaultEndDate.setDate(defaultEndDate.getDate() + 7);
-                endDate = today > defaultEndDate ? today : defaultEndDate;
+
+            // คำนวณเส้นสีแดง (Due Date)
+            if (dueDate && minDate) {
+                dueDay = Math.floor((dueDate - minDate) / (1000 * 60 * 60 * 24));
             }
-        }
 
-        const finalEndDate = (!endDate || endDate < startDate) ? startDate : endDate;
+            // คำนวณความยาวแถบ Gantt Bar
+            if (startDate && minDate) {
+                let endDate;
+                const status = (task.status || '').toLowerCase();
+                const isCompleted = status.includes('done') || status.includes('cancelled');
 
-        const startDay = Math.floor((startDate - minDate) / (1000 * 60 * 60 * 24));
-        const endDay = Math.floor((finalEndDate - minDate) / (1000 * 60 * 60 * 24));
-        const duration = Math.max(1, endDay - startDay + 1);
+                if (isCompleted) {
+                    const resolutionDate = parseDate(task.resolutiondate);
+                    endDate = resolutionDate ? resolutionDate : new Date(task.lastUpdated);
+                } else {
+                    if (dueDate) {
+                        endDate = today;
+                    } else {
+                        const defaultEndDate = new Date(startDate);
+                        defaultEndDate.setDate(defaultEndDate.getDate() + 7);
+                        endDate = today > defaultEndDate ? today : defaultEndDate;
+                    }
+                }
 
-        return { 
-            left: `${startDay * dayWidth}px`, 
-            width: `${duration * dayWidth}px`, 
-            backgroundColor: assigneeColors[task.assignee] || '#9ca3af' 
-        };
-    };
-    
+                const finalEndDate = (!endDate || endDate < startDate) ? startDate : endDate;
+                const startDay = Math.floor((startDate - minDate) / (1000 * 60 * 60 * 24));
+                const endDay = Math.floor((finalEndDate - minDate) / (1000 * 60 * 60 * 24));
+                const duration = Math.max(1, endDay - startDay + 1);
+
+                style = { 
+                    left: `${startDay * dayWidth}px`, 
+                    width: `${duration * dayWidth}px`, 
+                    backgroundColor: assigneeColors[task.assignee] || '#9ca3af' 
+                };
+            }
+
+            return { ...task, ganttStyle: style, dueDay };
+        });
+    }, [tasks, minDate, assigneeColors]); 
+
+
     if (tasks.length === 0) {
         return <div className="bg-white rounded-lg shadow text-center p-8 text-gray-500">No tasks to display.</div>;
     }
@@ -111,20 +130,25 @@ const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assig
                     </div>
                     <div className="flex bg-gray-50">
                         <div className="sticky left-0 p-3 border-b border-r font-medium bg-gray-50 z-30" style={{ width: taskColumnWidth, flexShrink: 0 }}>Task</div>
-                        {dates.map((date, index) => (<div key={index} className={`text-center text-xs py-2 border-b border-r ${date.toDateString() === currentDate.toDateString() ? 'bg-blue-200 text-blue-900 font-bold' : isWeekend(date) ? 'bg-red-50' : ''}`} style={{ minWidth: dayWidth, width: dayWidth }} title={formatDateFull(date)}>{date.getDate()}</div>))}
+                        {dates.map((date, index) => (
+                            <div 
+                                key={index} 
+                                className={`text-center text-xs py-2 border-b border-r ${date.toDateString() === currentDateStr ? 'bg-blue-200 text-blue-900 font-bold' : isWeekend(date) ? 'bg-red-50' : ''}`} 
+                                style={{ minWidth: dayWidth, width: dayWidth }} 
+                                title={formatDateFull(date)}
+                            >
+                                {date.getDate()}
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                {/* Body Section */}
-                {tasks.map((task) => {
-                    const dueDate = parseDate(task.dueDate);
-                    const dueDay = (dueDate && minDate) ? Math.floor((dueDate - minDate) / (1000 * 60 * 60 * 24)) : -1;
+                {/* Body Section (เรียกใช้ข้อมูลที่ถูกคำนวณเตรียมไว้แล้ว) */}
+                {processedTasks.map((task) => {
                     return (
                         <div key={task.id} className="flex border-b">
                             {/* Sticky Task Column */}
                             <div className="sticky left-0 bg-white hover:bg-gray-50 border-r py-3 px-3 cursor-pointer z-10" style={{ width: taskColumnWidth, flexShrink: 0 }} onClick={() => onTaskClick(task)}>
-                                
-                                {/* EDITED: Added back the conditional rendering for Compact Mode */}
                                 {isCompactMode ? (
                                     <div className="flex items-center justify-between w-full">
                                         <div className="flex items-center space-x-2 truncate">
@@ -154,12 +178,17 @@ const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assig
                             
                             {/* Timeline Column */}
                             <div className="relative" style={{ width: timelineWidth, flexShrink: 0 }}>
-                                <div className="absolute top-1/2 -translate-y-1/2 h-5 rounded-sm cursor-pointer hover:opacity-80 transition-opacity flex items-center" style={getTaskBarStyle(task)} onClick={() => onTaskClick(task)} title={task.title}></div>
+                                <div 
+                                    className="absolute top-1/2 -translate-y-1/2 h-5 rounded-sm cursor-pointer hover:opacity-80 transition-opacity flex items-center" 
+                                    style={task.ganttStyle} 
+                                    onClick={() => onTaskClick(task)} 
+                                    title={task.title}
+                                ></div>
                                 
-                                {dueDay >= 0 && dueDay < dates.length && (
+                                {task.dueDay >= 0 && task.dueDay < dates.length && (
                                     <div
                                         className="absolute top-0 bottom-0 w-0.5 bg-red-500"
-                                        style={{ left: `${(dueDay + 1) * dayWidth - 1}px` }} 
+                                        style={{ left: `${(task.dueDay + 1) * dayWidth - 1}px` }} 
                                         title={`Due: ${task.dueDate}`}
                                     />
                                 )}
@@ -172,4 +201,5 @@ const GanttChart = ({ tasks, minDate, maxDate, isCompactMode, onTaskClick, assig
     );
 };
 
-export default GanttChart;
+// 🚀 4. PERFORMANCE FIX: ครอบ React.memo เพื่อป้องกันการ Render ใหม่ถ้า Props ไม่เปลี่ยน
+export default React.memo(GanttChart);

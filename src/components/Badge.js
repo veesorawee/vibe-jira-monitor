@@ -1,70 +1,64 @@
 import React from 'react';
-import { ChevronsUp, ChevronUp, Minus, ChevronDown, Flame, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { parseDate, getStatusColor } from '../utils/helpers';
+import { ChevronsUp, ChevronUp, Minus, ChevronDown, Flame, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { parseDate } from '../utils/helpers';
 
 const Badge = ({ type, task }) => {
-    const baseClasses = "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border";
+    // 🚀 ปรับ Base Classes ให้พอดีกับ Icon อย่างเดียว ถ้าไม่มี Text
+    const baseClasses = "inline-flex items-center justify-center font-bold rounded-md border";
 
     if (type === 'priority') {
         const priority = task.priority || 'Low';
         let icon, color, text;
         switch (priority) {
             case 'Highest':
-                icon = <ChevronsUp size={14} className="text-red-900" />;
-                color = 'bg-red-200 text-red-900 border-red-300';
-                text = 'H+';
+                icon = <ChevronsUp size={14} />; color = 'bg-red-500/10 text-red-500 border-red-500/30'; text = 'H+';
                 break;
             case 'High':
-                icon = <ChevronUp size={14} className="text-orange-900" />;
-                color = 'bg-orange-200 text-orange-900 border-orange-300';
-                text = 'Hi';
+                icon = <ChevronUp size={14} />; color = 'bg-orange-500/10 text-orange-500 border-orange-500/30'; text = 'Hi';
                 break;
             case 'Medium':
-                icon = <Minus size={14} className="text-yellow-900" />;
-                color = 'bg-yellow-200 text-yellow-900 border-yellow-300';
-                text = 'Med';
+                icon = <Minus size={14} />; color = 'bg-blue-500/10 text-blue-500 border-blue-500/30'; text = 'Med';
                 break;
-            default: // Low
-                icon = <ChevronDown size={14} className="text-green-900" />;
-                color = 'bg-green-200 text-green-900 border-green-300';
-                text = 'Low';
+            default:
+                icon = <ChevronDown size={14} />; color = 'bg-green-500/10 text-green-500 border-green-500/30'; text = 'Low';
                 break;
         }
-        return <span title={priority} className={`${baseClasses} ${color}`}>{icon}{text}</span>;
+        return <span title={priority} className={`${baseClasses} px-2 py-0.5 text-xs gap-1 ${color}`}>{icon}{text}</span>;
     }
 
-    // EDITED: Updated timeliness badge logic to 3 states
     if (type === 'timeliness') {
         const dueDate = parseDate(task.dueDate);
-
-        // Case 1: No due date is set for the task.
+        
+        // 🚀 ถ้าไม่มี Due Date โชว์แค่ Icon สีเทา
         if (!dueDate) {
-            return <span title="No Due Date" className={`${baseClasses} bg-gray-200 text-gray-800 border-gray-300`}><AlertTriangle size={14} /> No Due</span>;
-        }
-
-        // Case 2: Due date exists, check if it's overdue.
-        const resolutionDate = parseDate(task.resolutiondate);
-        let isOverdue;
-
-        if (resolutionDate) {
-            // If resolved, compare resolution date to due date.
-            isOverdue = resolutionDate > dueDate;
-        } else {
-            // If not resolved, compare today's date to due date.
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Compare date part only
-            isOverdue = today > dueDate;
+            return (
+                <span title="No Due Date" className={`${baseClasses} w-6 h-6 bg-gray-500/10 text-gray-400 border-gray-500/30`}>
+                    <AlertTriangle size={14} />
+                </span>
+            );
         }
         
+        const resolutionDate = parseDate(task.resolutiondate);
+        let isOverdue = resolutionDate ? resolutionDate > dueDate : (new Date().setHours(0,0,0,0) > dueDate);
+        
+        // 🚀 โชว์แค่ Icon เปล่าๆ พร้อม Tooltip อธิบายเวลาเอาเมาส์ชี้
         if (isOverdue) {
-            return <span title="Overdue" className={`${baseClasses} bg-red-500 text-white border-red-600`}><Flame size={14} /> Overdue</span>;
-        } else {
-            return <span title="On Time" className={`${baseClasses} bg-green-200 text-green-900 border-green-300`}><CheckCircle2 size={14} /> On Time</span>;
+            return (
+                <span title="Overdue (เลยกำหนดเวลาแล้ว)" className={`${baseClasses} w-6 h-6 bg-red-500/20 text-red-500 border-red-500/50`}>
+                    <Flame size={14} />
+                </span>
+            );
         }
+        
+        return (
+            <span title="On Time (ยังไม่เกินกำหนด)" className={`${baseClasses} w-6 h-6 bg-green-500/10 text-green-500 border-green-500/30`}>
+                <CheckCircle2 size={14} />
+            </span>
+        );
     }
 
     if (type === 'status') {
-        return <span className={`${baseClasses} ${getStatusColor(task.status)}`}>{task.status}</span>;
+        return <span className={`${baseClasses} px-2 py-0.5 text-xs bg-[color:var(--surface2)] text-[color:var(--text)] border-[color:var(--border)]`}>{task.status}</span>;
     }
 
     return null;

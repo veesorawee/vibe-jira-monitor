@@ -70,7 +70,7 @@ const useJira = () => {
             return;
         }
 
-        const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+        const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
         loadJiraData();
 

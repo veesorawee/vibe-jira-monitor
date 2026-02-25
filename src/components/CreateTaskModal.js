@@ -25,18 +25,16 @@ const CreateTaskModal = ({
 
     useEffect(() => {
         if (isOpen) {
-            // Reset form when modal opens
             setSummary(''); setDescription(''); setPriority('Medium');
             setDueDate(''); setBiCategory(''); setDepartment('');
             setErrors({}); setIsSubmitting(false);
-            // Default assignee to the current user
             if (currentUser) {
                 setAssigneeId(currentUser.accountId);
             }
         }
     }, [isOpen, currentUser]);
 
-    const validateForm = () => { /* ... validation logic unchanged ... */ return true; };
+    const validateForm = () => { return true; };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -44,8 +42,7 @@ const CreateTaskModal = ({
         setIsSubmitting(true);
         setErrors({});
 
-        // EDITED: Construct the full, correct payload here in the frontend
-           const issueData = {
+        const issueData = {
             fields: {
                 project: { key: projectKey },
                 summary: summary,
@@ -69,14 +66,7 @@ const CreateTaskModal = ({
                 duedate: dueDate,
                 customfield_10307: biCategory,
                 customfield_10306: department,
-                
-                // Set assignee to the selected user, or default to the current user if "Unassigned" is chosen
                 assignee: { accountId: assigneeId || currentUser?.accountId },
-                
-                // Set reporter to the current user
-                /*reporter: { accountId: currentUser?.accountId },*/
-
-                // Set labels to be the current user's email
                 labels: currentUser?.emailAddress ? [currentUser.emailAddress] : []
             }
         };
@@ -93,61 +83,58 @@ const CreateTaskModal = ({
 
     if (!isOpen) return null;
 
-
     return (
-        <div className="fixed inset-0 flex items-center justify-center z-50 transition-opacity ease-in-out duration-200 bg-black bg-opacity-50" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col transition-all ease-in-out duration-300" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between p-4 border-b">
-                    <h3 className="text-lg font-semibold">Create New Task in "{projectKey}"</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 flex items-center justify-center z-50 transition-opacity ease-in-out duration-200 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-[color:var(--surface)] border border-[color:var(--border)] rounded-3xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col transition-all ease-in-out duration-300" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b border-[color:var(--border)]">
+                    <h3 className="text-xl font-bold text-[color:var(--text)] font-syne">Create New Task in <span className="text-[color:var(--accent)]">"{projectKey}"</span></h3>
+                    <button onClick={onClose} className="p-2 text-[color:var(--muted)] hover:text-[color:var(--accent2)] bg-[color:var(--surface2)] rounded-full transition-colors"><X className="w-5 h-5" /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-x-6 gap-y-4 overflow-y-auto">
+                <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-x-6 gap-y-5 overflow-y-auto">
                     <div className="col-span-2">
-                        <label htmlFor="summary" className="block text-sm font-medium text-gray-700 mb-1">Summary (Title) *</label>
-                        <input id="summary" type="text" value={summary} onChange={(e) => setSummary(e.target.value)} className={`w-full p-2 border rounded-lg ${errors.summary ? 'border-red-500' : 'border-gray-300'}`} />
+                        <label htmlFor="summary" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">Summary (Title) *</label>
+                        <input id="summary" type="text" value={summary} onChange={(e) => setSummary(e.target.value)} className={`w-full p-3 border bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors ${errors.summary ? 'border-[color:var(--accent2)]' : 'border-[color:var(--border)]'}`} />
                     </div>
                     <div className="col-span-2">
-                        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
-                        <textarea id="description" rows="4" value={description} onChange={(e) => setDescription(e.target.value)} className={`w-full p-2 border rounded-lg ${errors.description ? 'border-red-500' : 'border-gray-300'}`} />
+                        <label htmlFor="description" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">Description *</label>
+                        <textarea id="description" rows="4" value={description} onChange={(e) => setDescription(e.target.value)} className={`w-full p-3 border bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors ${errors.description ? 'border-[color:var(--accent2)]' : 'border-[color:var(--border)]'}`} />
                     </div>
                     <div>
-                        <label htmlFor="assignee" className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
-                        <select id="assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className="w-full p-2 border rounded-lg bg-white border-gray-300">
-                            {/* Option for the current user is the default */}
+                        <label htmlFor="assignee" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">Assignee</label>
+                        <select id="assignee" value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className="w-full p-3 border border-[color:var(--border)] bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors appearance-none">
                             {currentUser && <option value={currentUser.accountId}>Myself ({currentUser.displayName})</option>}
-                            {/* Other assignable users */}
                             {(assignableUsers || []).filter(u => u.accountId !== currentUser?.accountId).map(user => <option key={user.accountId} value={user.accountId}>{user.displayName}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="duedate" className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
-                        <input id="duedate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`w-full p-2 border rounded-lg ${errors.dueDate ? 'border-red-500' : 'border-gray-300'}`} />
+                        <label htmlFor="duedate" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">Due Date *</label>
+                        <input id="duedate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={`w-full p-3 border bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors [color-scheme:dark] ${errors.dueDate ? 'border-[color:var(--accent2)]' : 'border-[color:var(--border)]'}`} />
                     </div>
                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Priority *</label>
-                        <div className={`flex flex-wrap gap-2 rounded-lg ${errors.priority ? 'p-1 border border-red-500' : ''}`}>
-                            {priorities.map(p => (<button type="button" key={p} onClick={() => setPriority(p)} className={`px-3 py-1 text-sm rounded-full border-2 ${priority === p ? 'border-blue-500 bg-blue-100' : 'bg-gray-100 hover:bg-gray-200'}`}>{p}</button>))}
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-3">Priority *</label>
+                        <div className={`flex flex-wrap gap-2 rounded-xl ${errors.priority ? 'p-1 border border-[color:var(--accent2)]' : ''}`}>
+                            {priorities.map(p => (<button type="button" key={p} onClick={() => setPriority(p)} className={`px-4 py-2 text-sm font-bold rounded-xl border transition-all ${priority === p ? 'border-[color:var(--accent3)] bg-[color:var(--accent3)] text-white' : 'border-[color:var(--border)] bg-[color:var(--surface2)] text-[color:var(--text)] hover:border-[color:var(--muted)]'}`}>{p}</button>))}
                         </div>
                     </div>
                     <div>
-                        <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
-                        <select id="department" value={department} onChange={e => setDepartment(e.target.value)} className={`w-full p-2 border rounded-lg bg-white ${errors.department ? 'border-red-500' : 'border-gray-300'}`} required>
+                        <label htmlFor="department" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">Department *</label>
+                        <select id="department" value={department} onChange={e => setDepartment(e.target.value)} className={`w-full p-3 border bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors appearance-none ${errors.department ? 'border-[color:var(--accent2)]' : 'border-[color:var(--border)]'}`} required>
                             <option value="" disabled>Select a department</option>
                             {(departmentOptions || []).map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="biCategory" className="block text-sm font-medium text-gray-700 mb-1">BI Category *</label>
-                         <select id="biCategory" value={biCategory} onChange={e => setBiCategory(e.target.value)} className={`w-full p-2 border rounded-lg bg-white ${errors.biCategory ? 'border-red-500' : 'border-gray-300'}`} required>
+                        <label htmlFor="biCategory" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--muted)] mb-2">BI Category *</label>
+                         <select id="biCategory" value={biCategory} onChange={e => setBiCategory(e.target.value)} className={`w-full p-3 border bg-[color:var(--surface2)] text-[color:var(--text)] rounded-xl outline-none focus:border-[color:var(--accent)] transition-colors appearance-none ${errors.biCategory ? 'border-[color:var(--accent2)]' : 'border-[color:var(--border)]'}`} required>
                             <option value="" disabled>Select a category</option>
                             {(biCategoryOptions || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                         </select>
                     </div>
-                    {errors.submit && (<div className="col-span-2 bg-red-100 text-red-700 p-3 rounded-md text-sm"><strong>Error:</strong> {errors.submit}</div>)}
+                    {errors.submit && (<div className="col-span-2 bg-[color:var(--alert-bg)] border border-[color:var(--alert-border)] text-[color:var(--accent2)] p-4 rounded-xl text-sm font-bold">{errors.submit}</div>)}
                 </form>
-                <div className="flex justify-end space-x-3 p-4 border-t bg-gray-50">
-                    <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
-                    <button type="submit" onClick={handleSubmit} disabled={isSubmitting} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-wait">
+                <div className="flex justify-end space-x-3 p-6 border-t border-[color:var(--border)] bg-[color:var(--surface)] rounded-b-3xl">
+                    <button type="button" onClick={onClose} className="bg-[color:var(--surface2)] border border-[color:var(--border)] text-[color:var(--text)] font-bold px-6 py-2.5 rounded-xl hover:bg-[color:var(--border)] transition-colors">Cancel</button>
+                    <button type="submit" onClick={handleSubmit} disabled={isSubmitting} className="bg-[color:var(--accent)] text-[color:var(--bg)] font-bold px-6 py-2.5 rounded-xl hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSubmitting ? 'Creating...' : 'Create Task'}
                     </button>
                 </div>

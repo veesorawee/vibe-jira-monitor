@@ -12,34 +12,24 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder = "Selec
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // EDITED: New function to determine the visual "checked" state
-    // An option is checked if the `selected` array is empty (meaning "All") OR if it's explicitly included.
     const isOptionChecked = (option) => {
         if (selected.length === 0) return true;
         return selected.includes(option);
     };
 
-    // EDITED: New handler logic to correctly manage selecting/deselecting from an "All" state
     const handleSelect = (option) => {
         const isCurrentlyAllSelected = selected.length === 0;
         let newSelected = [];
 
         if (isCurrentlyAllSelected) {
-            // If "All" was selected, clicking one item means we now select all *except* that one.
             newSelected = options.filter(item => item !== option);
         } else {
-            // If a specific set of items was selected...
             if (selected.includes(option)) {
-                // ... and we click an already selected item, we remove it.
                 newSelected = selected.filter(item => item !== option);
             } else {
-                // ... and we click a new item, we add it to the selection.
                 newSelected = [...selected, option];
             }
         }
-
-        // If, after all logic, the number of selected items equals the total number of options,
-        // it's equivalent to selecting "All", so we reset the state to an empty array.
         if (newSelected.length === options.length) {
             onChange([]);
         } else {
@@ -62,22 +52,24 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder = "Selec
 
     return (
         <div className="relative" ref={dropdownRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className="w-full p-2 border border-gray-300 rounded-lg bg-white text-left flex justify-between items-center">
-                <span className="truncate">{getButtonLabel()}</span>
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full p-2.5 border rounded-xl text-left flex justify-between items-center transition-all bg-[color:var(--surface2)] border-[color:var(--border)] text-[color:var(--text)] focus:border-[color:var(--accent)] outline-none">
+                <span className="truncate text-sm font-medium">{getButtonLabel()}</span>
                 <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
             {isOpen && (
-                <div className="absolute z-30 w-full bg-white border rounded-lg mt-1 max-h-60 overflow-y-auto shadow-lg">
+                <div className="absolute z-50 w-full mt-2 max-h-60 overflow-y-auto shadow-2xl rounded-xl border bg-[color:var(--surface)] border-[color:var(--border)]">
                     {options.map(option => (
-                        <label key={option} className="flex items-center p-2 hover:bg-gray-100 cursor-pointer">
+                        <label key={option} className="flex items-center p-3 cursor-pointer hover:bg-[color:var(--surface2)] transition-colors text-[color:var(--text)] border-b border-[color:var(--border)] last:border-0">
                             <input 
                                 type="checkbox" 
-                                checked={isOptionChecked(option)} // Use new checked logic
-                                onChange={() => handleSelect(option)} // Use new handler logic
-                                className="mr-3 h-4 w-4 rounded text-blue-600 focus:ring-blue-500" 
+                                checked={isOptionChecked(option)} 
+                                onChange={() => handleSelect(option)} 
+                                className="mr-3 h-4 w-4 accent-[color:var(--accent)] rounded cursor-pointer" 
                             />
-                            {colors && <span className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: colors[option]}}></span>}
-                            {tasks ? formatAssigneeName(option, tasks.find(t => t.assignee === option)?.assigneeEmail) : option}
+                            {colors && <span className="w-3 h-3 rounded-full mr-3 shadow-inner flex-shrink-0" style={{backgroundColor: colors[option]}}></span>}
+                            <span className="text-sm truncate">
+                                {tasks ? formatAssigneeName(option, tasks.find(t => t.assignee === option)?.assigneeEmail) : option}
+                            </span>
                         </label>
                     ))}
                 </div>
