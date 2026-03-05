@@ -49,13 +49,14 @@ const BoardView = ({ tasks, onTaskClick, assigneeColors, openAssigneeDrawer }) =
 
           <div className="p-3 flex-1 overflow-y-auto space-y-3">
             {colTasks.map(task => {
-              const overdue = !colName.includes('DONE') && isOverdue(task.dueDate);
+              // 🚀 Logic: Overdue ใช้ได้แค่ใน To Do และ In Progress เท่านั้น ไม่นับ Done และ Hold
+              const overdue = (colName === 'TO DO' || colName === 'IN PROGRESS') && isOverdue(task.dueDate);
               
               return (
                 <div 
                   key={task.id} 
                   onClick={() => onTaskClick(task)}
-                  className={`bg-[color:var(--surface)] p-4 rounded-xl shadow-sm border cursor-pointer hover:-translate-y-1 transition-transform ${overdue ? 'border-l-4 border-l-[color:var(--accent2)] border-[color:var(--alert-border)]' : 'border-[color:var(--border)] hover:border-l-4 hover:border-l-[color:var(--accent)]'}`}
+                  className={`bg-[color:var(--surface)] p-4 rounded-xl shadow-sm border cursor-pointer hover:-translate-y-1 transition-transform ${overdue ? 'border-l-4 border-l-[#f87171] border-[#f87171]/40' : 'border-[color:var(--border)] hover:border-l-4 hover:border-l-[color:var(--accent)]'}`}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-bold text-[color:var(--muted)]">{task.id}</span>
@@ -67,7 +68,6 @@ const BoardView = ({ tasks, onTaskClick, assigneeColors, openAssigneeDrawer }) =
                   </p>
                   
                   <div className="flex justify-between items-center pt-3 border-t border-[color:var(--border)]">
-                    {/* 🚀 กดที่ชื่อใน Board เพื่อเปิด Assignee Drawer */}
                     <div 
                         className="flex items-center space-x-2 truncate hover:underline decoration-2 underline-offset-2 transition-all cursor-pointer" 
                         style={{ textDecorationColor: assigneeColors[task.assignee] || 'var(--muted)' }}
@@ -80,7 +80,7 @@ const BoardView = ({ tasks, onTaskClick, assigneeColors, openAssigneeDrawer }) =
                     </div>
 
                     {task.dueDate && (
-                      <div className={`flex items-center text-[11px] font-bold ${overdue ? 'text-[color:var(--accent2)]' : 'text-[color:var(--muted)]'}`}>
+                      <div className={`flex items-center text-[11px] font-bold ${overdue ? 'text-[#f87171]' : 'text-[color:var(--muted)]'}`}>
                         {overdue ? <AlertCircle size={12} className="mr-1"/> : <Clock size={12} className="mr-1"/>}
                         {new Date(task.dueDate).toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})}
                       </div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { X, CheckCircle2, AlertCircle, Clock, Briefcase, ListTodo, Users } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis } from 'recharts';
+import { X, CheckCircle2, AlertCircle, Briefcase, Users, LayoutList, PauseCircle } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { parseDate } from '../utils/helpers';
 
 const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], departmentColors, biCategoryColors, onTaskClick }) => {
@@ -11,6 +11,7 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
         todayStart.setHours(0, 0, 0, 0);
 
         const activeTasks = [];
+        const holdTasks = [];
         const completedTasks = [];
         let overdueCount = 0;
 
@@ -18,17 +19,22 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
         const deptCount = {};
 
         tasks.forEach(task => {
-            const isDone = (task.status || '').toLowerCase().includes('done') || (task.status || '').toLowerCase().includes('cancel');
+            const statusLower = (task.status || '').toLowerCase();
+            const isDone = statusLower.includes('done') || statusLower.includes('cancel');
+            const isHold = statusLower.includes('on hold') || statusLower.includes('pending user review');
+            const isActive = !isDone && !isHold;
             
             if (isDone) {
                 completedTasks.push(task);
-            } else {
+            } else if (isHold) {
+                holdTasks.push(task);
+            } else if (isActive) {
                 activeTasks.push(task);
+                // 🚀 Logic: Overdue นับเฉพาะ Active
                 const dueDate = parseDate(task.dueDate);
                 if (dueDate && dueDate < todayStart) overdueCount++;
             }
 
-            // นับสัดส่วนเฉพาะงานทั้งหมดเพื่อหา Focus Area
             const cat = task.biCategory || 'Uncategorized';
             catCount[cat] = (catCount[cat] || 0) + 1;
 
@@ -36,24 +42,21 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
             deptCount[dept] = (deptCount[dept] || 0) + 1;
         });
 
-        // จัดเรียง Data สำหรับ กราฟโดนัท (Category)
         const catData = Object.keys(catCount).map(key => ({
             name: key, value: catCount[key], color: biCategoryColors[key] || '#ccc'
         })).sort((a, b) => b.value - a.value);
 
-        // จัดเรียง Data สำหรับ กราฟโดนัท (Department)
         const deptData = Object.keys(deptCount).map(key => ({
             name: key, value: deptCount[key], color: departmentColors[key] || '#ccc'
         })).sort((a, b) => b.value - a.value);
 
         return {
             activeTasks: activeTasks.sort((a, b) => parseDate(b.created || b.startDate) - parseDate(a.created || a.startDate)),
+            holdTasks: holdTasks.sort((a, b) => parseDate(b.created || b.startDate) - parseDate(a.created || a.startDate)),
             completedTasks: completedTasks.sort((a, b) => parseDate(b.resolutiondate || b.lastUpdated) - parseDate(a.resolutiondate || a.lastUpdated)),
             overdueCount,
             catData,
-            deptData,
-            topCategory: catData.length > 0 ? catData[0].name : 'N/A',
-            topDept: deptData.length > 0 ? deptData[0].name : 'N/A'
+            deptData
         };
     }, [tasks, departmentColors, biCategoryColors]);
 
@@ -83,7 +86,11 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
                     </thead>
                     <tbody className="divide-y divide-[color:var(--border)]">
                         {taskList.map(task => {
-                            const isOverdue = !isCompletedList && task.dueDate && parseDate(task.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                            const statusLower = (task.status || '').toLowerCase();
+                            const isHold = statusLower.includes('on hold') || statusLower.includes('pending user review');
+                            // ถ้างายเสร็จแล้ว หรือ Hold จะไม่มี Overdue label
+                            const isOverdue = !isCompletedList && !isHold && task.dueDate && parseDate(task.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                            
                             return (
                                 <tr key={task.id} className="hover:bg-[color:var(--surface2)] cursor-pointer transition-colors text-[color:var(--text)]" onClick={() => onTaskClick(task)}>
                                     <td className="px-5 py-3 font-bold text-[color:var(--accent3)] whitespace-nowrap">{task.id}</td>
@@ -93,11 +100,11 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
                                             {task.status}
                                         </span>
                                     </td>
-                                    <td className={`px-5 py-3 font-medium whitespace-nowrap ${isOverdue ? 'text-[color:var(--accent2)]' : 'text-[color:var(--muted)]'}`}>
+                                    <td className={`px-5 py-3 font-medium whitespace-nowrap ${isOverdue ? 'text-[#f87171]' : 'text-[color:var(--muted)]'}`}>
                                         {isCompletedList 
                                             ? (task.resolutiondate ? new Date(task.resolutiondate).toLocaleDateString('en-GB') : '-') 
                                             : (task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-GB') : '-')}
-                                        {isOverdue && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-[color:var(--alert-bg)] text-[color:var(--accent2)] border border-[color:var(--alert-border)]">OVERDUE</span>}
+                                        {isOverdue && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#f87171]/10 text-[#f87171] border border-[#f87171]/30">OVERDUE</span>}
                                     </td>
                                 </tr>
                             );
@@ -115,7 +122,6 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
             
             <div className={`fixed top-0 right-0 h-full bg-[color:var(--bg)] border-l border-[color:var(--border)] w-full max-w-4xl shadow-2xl transition-transform transform ease-in-out duration-300 flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 
-                {/* 🌟 HEADER */}
                 <div className="flex items-center justify-between p-6 border-b border-[color:var(--border)] bg-[color:var(--surface)] flex-shrink-0">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-[color:var(--accent)] flex items-center justify-center text-[color:var(--bg)] font-syne font-bold text-xl shadow-inner">
@@ -134,24 +140,24 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
                     {/* 🌟 METRICS CARDS */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-[color:var(--surface)] border border-[color:var(--border)] rounded-2xl p-5 shadow-sm flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-[color:var(--accent)]/10 text-[color:var(--accent)] flex items-center justify-center border border-[color:var(--accent)]/20"><ListTodo size={20} /></div>
+                            <div className="w-10 h-10 rounded-xl bg-[#60a5fa]/10 text-[#60a5fa] flex items-center justify-center border border-[#60a5fa]/20"><LayoutList size={20} /></div>
                             <div>
-                                <p className="text-xs font-bold text-[color:var(--muted)] uppercase tracking-wider">Active Tasks</p>
-                                <p className="text-2xl font-black font-syne text-[color:var(--text)]">{insights.activeTasks.length}</p>
+                                <p className="text-xs font-bold text-[color:var(--muted)] uppercase tracking-wider">Active</p>
+                                <p className="text-2xl font-black font-syne text-[#60a5fa]">{insights.activeTasks.length}</p>
                             </div>
                         </div>
                         <div className="bg-[color:var(--surface)] border border-[color:var(--border)] rounded-2xl p-5 shadow-sm flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-[color:var(--accent4)]/10 text-[color:var(--accent4)] flex items-center justify-center border border-[color:var(--accent4)]/20"><CheckCircle2 size={20} /></div>
+                            <div className="w-10 h-10 rounded-xl bg-[#64748b]/10 text-[#64748b] flex items-center justify-center border border-[#64748b]/20"><PauseCircle size={20} /></div>
                             <div>
-                                <p className="text-xs font-bold text-[color:var(--muted)] uppercase tracking-wider">Completed</p>
-                                <p className="text-2xl font-black font-syne text-[color:var(--text)]">{insights.completedTasks.length}</p>
+                                <p className="text-xs font-bold text-[color:var(--muted)] uppercase tracking-wider">On Hold</p>
+                                <p className="text-2xl font-black font-syne text-[#64748b]">{insights.holdTasks.length}</p>
                             </div>
                         </div>
-                        <div className={`bg-[color:var(--surface)] border rounded-2xl p-5 shadow-sm flex items-center gap-4 ${insights.overdueCount > 0 ? 'border-[color:var(--alert-border)] bg-[color:var(--alert-bg)]' : 'border-[color:var(--border)]'}`}>
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${insights.overdueCount > 0 ? 'bg-[color:var(--accent2)]/20 text-[color:var(--accent2)] border-[color:var(--accent2)]/30' : 'bg-[color:var(--surface2)] text-[color:var(--muted)] border-[color:var(--border)]'}`}><AlertCircle size={20} /></div>
+                        <div className={`bg-[color:var(--surface)] border rounded-2xl p-5 shadow-sm flex items-center gap-4 ${insights.overdueCount > 0 ? 'border-[#f87171]/50 bg-[#f87171]/5' : 'border-[color:var(--border)]'}`}>
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${insights.overdueCount > 0 ? 'bg-[#f87171]/20 text-[#f87171] border-[#f87171]/30' : 'bg-[color:var(--surface2)] text-[color:var(--muted)] border-[color:var(--border)]'}`}><AlertCircle size={20} /></div>
                             <div>
-                                <p className={`text-xs font-bold uppercase tracking-wider ${insights.overdueCount > 0 ? 'text-[color:var(--accent2)]' : 'text-[color:var(--muted)]'}`}>Overdue</p>
-                                <p className={`text-2xl font-black font-syne ${insights.overdueCount > 0 ? 'text-[color:var(--accent2)]' : 'text-[color:var(--text)]'}`}>{insights.overdueCount}</p>
+                                <p className={`text-xs font-bold uppercase tracking-wider ${insights.overdueCount > 0 ? 'text-[#f87171]' : 'text-[color:var(--muted)]'}`}>Overdue (Active)</p>
+                                <p className={`text-2xl font-black font-syne ${insights.overdueCount > 0 ? 'text-[#f87171]' : 'text-[color:var(--text)]'}`}>{insights.overdueCount}</p>
                             </div>
                         </div>
                     </div>
@@ -226,19 +232,27 @@ const AssigneeChartDrawer = ({ isOpen, onClose, assigneeName, tasks = [], depart
                         <div className="flex items-center space-x-2 bg-[color:var(--surface2)] border border-[color:var(--border)] p-1 rounded-xl w-max shadow-inner">
                             <button 
                                 onClick={() => setActiveTab('active')} 
-                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${activeTab === 'active' ? 'bg-[color:var(--surface)] text-[color:var(--accent)] shadow border border-[color:var(--border)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}
+                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${activeTab === 'active' ? 'bg-[color:var(--surface)] text-[#60a5fa] shadow border border-[color:var(--border)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}
                             >
-                                <Clock size={16} /> Active ({insights.activeTasks.length})
+                                <LayoutList size={16} /> Active ({insights.activeTasks.length})
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('hold')} 
+                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${activeTab === 'hold' ? 'bg-[color:var(--surface)] text-[#64748b] shadow border border-[color:var(--border)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}
+                            >
+                                <PauseCircle size={16} /> Hold ({insights.holdTasks.length})
                             </button>
                             <button 
                                 onClick={() => setActiveTab('completed')} 
-                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${activeTab === 'completed' ? 'bg-[color:var(--surface)] text-[color:var(--accent4)] shadow border border-[color:var(--border)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}
+                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2 ${activeTab === 'completed' ? 'bg-[color:var(--surface)] text-[#4ade80] shadow border border-[color:var(--border)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}
                             >
-                                <CheckCircle2 size={16} /> Completed ({insights.completedTasks.length})
+                                <CheckCircle2 size={16} /> Done ({insights.completedTasks.length})
                             </button>
                         </div>
 
-                        {activeTab === 'active' ? renderTable(insights.activeTasks, false) : renderTable(insights.completedTasks, true)}
+                        {activeTab === 'active' && renderTable(insights.activeTasks, false)}
+                        {activeTab === 'hold' && renderTable(insights.holdTasks, false)}
+                        {activeTab === 'completed' && renderTable(insights.completedTasks, true)}
                     </div>
 
                 </div>

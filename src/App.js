@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Filter, Search, RefreshCw, Settings, TrendingUp, LayoutDashboard, Table as TableIcon, ChevronDown, ChevronUp, PlusCircle, Zap, Moon, Sun, Kanban, Activity, Users, LineChart as LineChartIcon } from 'lucide-react';
+import { Filter, Search, RefreshCw, Settings, TrendingUp, LayoutDashboard, Table as TableIcon, ChevronDown, ChevronUp, PlusCircle, Zap, Moon, Sun, Kanban, Activity, Users, LineChart as LineChartIcon, Network } from 'lucide-react';
 import { LineChart as RechartsLineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 import useJira from './hooks/useJira';
@@ -13,6 +13,7 @@ import LabelChartDrawer from './components/LabelChartDrawer';
 import ConfigModal from './components/ConfigModal';
 import CreateTaskModal from './components/CreateTaskModal';
 import Badge from './components/Badge';
+import TaskFlowView from './components/TaskFlowView';
 
 import ManagerDashboard from './components/ManagerDashboard';
 import TableView from './components/TableView';
@@ -151,6 +152,9 @@ export default function App() {
     const closeDrawer = useCallback(() => setDrawerState({ isOpen: false, title: '', tasks: [] }), []);
     const closeAssigneeChartDrawer = useCallback(() => setAssigneeChartDrawer({ isOpen: false, assigneeName: '', tasks: [] }), []);
     const closeLabelChartDrawer = useCallback(() => setLabelChartDrawer({ isOpen: false, labelName: '', tasks: [] }), []);
+    const openLabelChartDrawer = useCallback((labelName, tasks) => {
+        setLabelChartDrawer({ isOpen: true, labelName, tasks });
+    }, []);
 
     const openAssigneeDrawer = useCallback((assigneeName) => {
         const personTasks = allTasks.filter(t => t.assignee === assigneeName);
@@ -310,6 +314,7 @@ export default function App() {
                     <TabButton mode="manager" icon={LayoutDashboard} label="Overview" activeClass="bg-[color:var(--accent)] text-[color:var(--bg)] shadow-md" />
                     <TabButton mode="timeline" icon={Activity} label="Timeline" activeClass="bg-[color:var(--accent3)] text-[color:var(--bg)] shadow-md" />
                     <TabButton mode="workload" icon={LineChartIcon} label="Workload" activeClass="bg-[#c084fc] text-white shadow-md" />
+                    <TabButton mode="flow" icon={Network} label="Flow" activeClass="bg-[#10b981] text-white shadow-md" />
                     <TabButton mode="board" icon={Kanban} label="Board" activeClass="bg-[color:var(--accent4)] text-[color:var(--bg)] shadow-md" />
                     <TabButton mode="table" icon={TableIcon} label="Table List" activeClass="bg-[#ffb347] text-gray-900 shadow-md" />
                     <TabButton mode="team" icon={Users} label="Team" activeClass="bg-blue-500 text-white shadow-md" />
@@ -383,7 +388,7 @@ export default function App() {
             <main className="flex-1 px-4 sm:px-6 pb-12 pt-4 w-full font-sans">
                 {error && viewMode === 'manager' && <div className="mb-6 p-4 bg-[color:var(--alert-bg)] border border-[color:var(--alert-border)] text-[color:var(--accent2)] rounded-2xl font-semibold">⚠️ {error}</div>}
 
-                {viewMode === 'manager' && <ManagerDashboard tasks={tasks} openDrawer={openDrawer} assigneeColors={assigneeColors} uniqueAssignees={uniqueAssignees} openAssigneeDrawer={openAssigneeDrawer} />}
+                {viewMode === 'manager' && <ManagerDashboard tasks={tasks} openDrawer={openDrawer} assigneeColors={assigneeColors} uniqueAssignees={uniqueAssignees} openAssigneeDrawer={openAssigneeDrawer} openLabelChartDrawer={openLabelChartDrawer} />}
                 
                 {viewMode === 'timeline' && (
                     <div className="animate-in fade-in duration-300">
@@ -423,6 +428,18 @@ export default function App() {
                     </div>
                 )}
 
+                {viewMode === 'flow' && (
+    <div className="animate-in fade-in duration-300 mt-2">
+        <TaskFlowView 
+            tasks={tasks} 
+            departmentColors={departmentColors} 
+            biCategoryColors={biCategoryColors} 
+            assigneeColors={assigneeColors} 
+            openTaskDrawer={openDrawer}
+        />
+    </div>
+)}
+
                 {viewMode === 'team' && (
                     <div className="animate-in fade-in duration-300 mt-2">
                         <TeamView groupedByTeam={groupedByTeam} assigneeColors={assigneeColors} onTaskClick={handleTaskClick} openAssigneeDrawer={openAssigneeDrawer} />
@@ -443,9 +460,9 @@ export default function App() {
             </main>
             
             <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onUpdateTask={handleUpdateTask} jiraAPI={jiraAPI} isConnected={isConnected} assignableUsers={projectUsers} currentUser={currentUser} openAssigneeDrawer={openAssigneeDrawer} />
-            <TaskListDrawer isOpen={drawerState.isOpen} onClose={closeDrawer} title={drawerState.title} tasks={drawerState.tasks} onTaskClick={(task) => { handleTaskClick(task); closeDrawer(); }}/>
+            <TaskListDrawer isOpen={drawerState.isOpen} onClose={closeDrawer} assigneeColors={assigneeColors} title={drawerState.title} tasks={drawerState.tasks} onTaskClick={(task) => { handleTaskClick(task); closeDrawer(); }}/>
             <AssigneeChartDrawer isOpen={assigneeChartDrawer.isOpen} onClose={closeAssigneeChartDrawer} assigneeName={assigneeChartDrawer.assigneeName} tasks={assigneeChartDrawer.tasks} departmentColors={departmentColors} biCategoryColors={biCategoryColors} onTaskClick={(task) => { closeAssigneeChartDrawer(); handleTaskClick(task); }}/>
-            <LabelChartDrawer isOpen={labelChartDrawer.isOpen} onClose={closeLabelChartDrawer} labelName={labelChartDrawer.labelName} tasks={labelChartDrawer.tasks} biCategoryColors={biCategoryColors} onTaskClick={(task) => { closeLabelChartDrawer(); handleTaskClick(task); }}/>
+            <LabelChartDrawer isOpen={labelChartDrawer.isOpen} onClose={closeLabelChartDrawer} labelName={labelChartDrawer.labelName} tasks={labelChartDrawer.tasks} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onTaskClick={(task) => { closeLabelChartDrawer(); handleTaskClick(task); }}/>
             <ConfigModal isOpen={showConfig} onClose={() => setShowConfig(false)} jiraConfig={jiraConfig} saveJiraConfig={saveJiraConfig} isConnected={isConnected} />
             <CreateTaskModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateTask} projectKey={jiraConfig.projectKey} currentUser={currentUser} assignableUsers={projectUsers} departmentOptions={allDepartments} biCategoryOptions={staticBiCategoriesForCreate} />
         </div>

@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { parseDate } from '../utils/helpers';
 
-export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, uniqueAssignees = [], openAssigneeDrawer }) {
-  // ... (ฟังก์ชัน insights และ const ต่างๆ เหมือนเดิมทุกอย่าง)
+export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, uniqueAssignees = [], openAssigneeDrawer,openLabelChartDrawer }) {
+  
   const insights = useMemo(() => {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
@@ -105,9 +105,52 @@ export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, un
       assignees: Object.values(assignees).sort((a, b) => b.tasks.length - a.tasks.length), 
       departments: Object.values(departments).sort((a, b) => b.tasks.length - a.tasks.length).slice(0, 5), 
       categories: Object.values(categories).sort((a, b) => b.tasks.length - a.tasks.length).slice(0, 5),
-      chartData
+      chartData,
+      totalActive: activeTasksList.length
     };
   }, [tasks, uniqueAssignees]);
+
+  // 🚀 เพิ่ม Data Grouping สำหรับ VIP Requesters ดึงจาก Label
+  const demandInsights = useMemo(() => {
+      const requesterStats = {};
+
+      tasks.forEach(task => {
+          const s = (task.status || '').toLowerCase();
+          const isDone = s.includes('done') || s.includes('cancel');
+          
+          // นับเฉพาะงานที่ยัง Active อยู่
+          if (!isDone) {
+              const dept = task.department || 'Unknown';
+              
+              // ดึงชื่อคนสั่งจาก Label ที่มีเครื่องหมาย @
+              const emailLabel = (task.labels || []).find(l => l.includes('@'));
+              let requester = 'Unknown';
+              if (emailLabel) {
+                  requester = emailLabel.split('@')[0];
+              }
+
+              if (!requesterStats[requester]) {
+                  // 🟢 เพิ่ม tasks: [] เพื่อเก็บรายการงานไว้ให้กดดู
+                  requesterStats[requester] = { name: requester, count: 0, depts: {}, tasks: [] };
+              }
+              
+              requesterStats[requester].count++;
+              requesterStats[requester].depts[dept] = (requesterStats[requester].depts[dept] || 0) + 1;
+              requesterStats[requester].tasks.push(task); // 🟢 ยัด task เข้าไปเก็บไว้
+          }
+      });
+
+      const topRequesters = Object.values(requesterStats)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+          .map(req => {
+              // หาแผนกที่คนนี้สั่งงานบ่อยที่สุดมาโชว์
+              const primaryDept = Object.keys(req.depts).reduce((a, b) => req.depts[a] > req.depts[b] ? a : b);
+              return { ...req, primaryDept };
+          });
+
+      return { topRequesters };
+  }, [tasks]);
 
   const getInitials = (name) => {
     if (!name || name === 'Unassigned') return '?';
@@ -205,7 +248,6 @@ export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, un
           return (
             <div 
               key={person.name} 
-              // 🚀 แก้ให้ใช้ openAssigneeDrawer แทน openDrawer เพื่อเปิดเป็นกราฟสรุปงานรายคน
               className={`bg-[color:var(--surface)] border rounded-2xl p-5 transition-all hover:-translate-y-1 hover:shadow-lg ${person.overdue > 0 ? 'border-[color:var(--alert-border)] bg-[color:var(--alert-bg)] cursor-pointer' : (person.tasks.length === 0 ? 'border-[color:var(--border)] opacity-60' : 'border-[color:var(--border)] cursor-pointer')}`}
               onClick={() => { if(person.tasks.length > 0 && openAssigneeDrawer) openAssigneeDrawer(person.name); }}
             >
@@ -232,17 +274,17 @@ export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, un
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 font-sans mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6 font-sans mb-4">
         <div className="bg-[color:var(--surface)] border border-[color:var(--border)] rounded-2xl p-6">
           <h3 className="text-xs font-syne uppercase tracking-widest text-[color:var(--muted)] font-bold mb-5">Top Departments (Origin)</h3>
           <div>
             {insights.departments.map((dept, idx) => {
-              const percentage = (dept.tasks.length / insights.totalActive) * 100;
+              const percentage = insights.totalActive > 0 ? (dept.tasks.length / insights.totalActive) * 100 : 0;
               const barColor = ['var(--accent)', 'var(--accent3)', 'var(--accent4)', '#c084fc', '#fb7185'][idx];
               return (
                 <div key={dept.name} className="flex items-center gap-4 py-3 border-b border-[color:var(--border)] last:border-0 cursor-pointer hover:pl-2 transition-all" onClick={() => openDrawer && openDrawer(`งานจาก ${dept.name}`, dept.tasks)}>
                   <div className="flex-1 font-semibold text-sm text-[color:var(--text)]">{dept.name}</div>
-                  <div className="w-24 h-1.5 bg-[color:var(--surface2)] rounded-full overflow-hidden">
+                  <div className="w-24 h-1.5 bg-[color:var(--surface2)] rounded-full overflow-hidden hidden sm:block">
                     <div className="h-full rounded-full" style={{width: `${percentage}%`, backgroundColor: barColor}}></div>
                   </div>
                   <div className="w-8 text-right font-syne font-black text-lg text-[color:var(--text)]">{dept.tasks.length}</div>
@@ -257,12 +299,12 @@ export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, un
           <h3 className="text-xs font-syne uppercase tracking-widest text-[color:var(--muted)] font-bold mb-5">Top Task Types (BI Category)</h3>
           <div>
             {insights.categories.map((cat, idx) => {
-              const percentage = (cat.tasks.length / insights.totalActive) * 100;
+              const percentage = insights.totalActive > 0 ? (cat.tasks.length / insights.totalActive) * 100 : 0;
               const barColor = ['var(--accent)', 'var(--accent3)', 'var(--accent4)', '#c084fc', '#fb7185'][idx];
               return (
                 <div key={cat.name} className="flex items-center gap-4 py-3 border-b border-[color:var(--border)] last:border-0 cursor-pointer hover:pl-2 transition-all" onClick={() => openDrawer && openDrawer(`งานประเภท ${cat.name}`, cat.tasks)}>
                   <div className="flex-1 font-semibold text-sm text-[color:var(--text)]">{cat.name}</div>
-                  <div className="w-24 h-1.5 bg-[color:var(--surface2)] rounded-full overflow-hidden">
+                  <div className="w-24 h-1.5 bg-[color:var(--surface2)] rounded-full overflow-hidden hidden sm:block">
                     <div className="h-full rounded-full" style={{width: `${percentage}%`, backgroundColor: barColor}}></div>
                   </div>
                   <div className="w-8 text-right font-syne font-black text-lg text-[color:var(--text)]">{cat.tasks.length}</div>
@@ -271,6 +313,36 @@ export default function ManagerDashboard({ tasks, openDrawer, assigneeColors, un
             })}
             {insights.categories.length === 0 && <div className="text-[color:var(--muted)] text-sm">No active tasks.</div>}
           </div>
+        </div>
+
+        {/* 🚀 กล่อง VIP Requesters พร้อมให้คลิกได้แล้ว */}
+        <div className="bg-[color:var(--surface)] border border-[color:var(--border)] rounded-2xl p-6">
+            <h3 className="text-xs font-syne uppercase tracking-widest text-[color:var(--muted)] font-bold mb-5">VIP Requesters (Active)</h3>
+            <div className="space-y-3">
+                {demandInsights.topRequesters.map((req, i) => (
+                    <div 
+                        key={req.name} 
+                        // 🟢 เพิ่ม Cursor Pointer และ Hover Effect ให้ดูน่ากด
+                        className="flex items-center justify-between p-3 bg-[color:var(--surface2)] rounded-xl border border-[color:var(--border)] cursor-pointer hover:border-[color:var(--accent)] hover:-translate-y-0.5 transition-all shadow-sm hover:shadow"
+                        // 🟢 เพิ่ม onClick ให้เปิด Drawer
+                        onClick={() => openLabelChartDrawer && openLabelChartDrawer(req.name, req.tasks)}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[color:var(--accent)] text-[color:var(--bg)] flex items-center justify-center font-bold">
+                                #{i + 1}
+                            </div>
+                            <div>
+                                <p className="font-bold text-[color:var(--text)] text-sm">{req.name}</p>
+                                <p className="text-[10px] text-[color:var(--muted)] uppercase truncate max-w-[120px]">{req.primaryDept}</p>
+                            </div>
+                        </div>
+                        <div className="text-xl font-black font-syne text-[color:var(--text)]">
+                            {req.count} <span className="text-xs text-[color:var(--muted)] font-normal">tasks</span>
+                        </div>
+                    </div>
+                ))}
+                {demandInsights.topRequesters.length === 0 && <div className="text-[color:var(--muted)] text-sm">No data.</div>}
+            </div>
         </div>
       </div>
     </div>

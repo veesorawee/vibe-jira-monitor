@@ -15,7 +15,7 @@ const CATEGORY_MAP = {
 const FOCUS_CATEGORIES = Object.keys(CATEGORY_MAP).filter(k => k !== 'Other');
 const ALL_AXES = [...FOCUS_CATEGORIES, 'Other'];
 
-const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer }) => {
+const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer, onTaskClick }) => {
     
     const [speedLogModal, setSpeedLogModal] = useState({ isOpen: false, assigneeName: '', logs: [] });
 
@@ -103,7 +103,8 @@ const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer }) => {
                         dueDate: dDate,
                         resolvedDate: rDate,
                         speedDays: speedD,
-                        isOverdue: isOverD
+                        isOverdue: isOverD,
+                        fullTask: t // เก็บข้อมูลเต็มไว้ใช้กดเปิด Drawer
                     });
                 }
             });
@@ -168,7 +169,7 @@ const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer }) => {
                         <div 
                             key={player.person} 
                             className="bg-[color:var(--surface)] rounded-[24px] shadow-sm hover:shadow-xl border border-[color:var(--border)] overflow-hidden flex flex-col transition-all duration-300 group cursor-pointer hover:border-[color:var(--accent)]/40"
-                            onClick={() => openAssigneeDrawer(player.person)}
+                            onClick={() => openAssigneeDrawer && openAssigneeDrawer(player.person)}
                         >
                             {/* Header */}
                             <div className="px-5 py-4 bg-[color:var(--surface2)]/50 flex justify-between items-center">
@@ -193,7 +194,7 @@ const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer }) => {
                                 )}
                             </div>
 
-                            {/* Stats — no border-y, no dividers */}
+                            {/* Stats */}
                             <div className="grid grid-cols-5 gap-0 bg-[color:var(--bg)]/40 px-2 py-2">
                                 
                                 <div className="p-2 text-center flex flex-col items-center justify-center">
@@ -320,9 +321,17 @@ const TeamView = ({ groupedByTeam, assigneeColors, openAssigneeDrawer }) => {
                                     </thead>
                                     <tbody className="divide-y divide-[color:var(--border)]">
                                         {speedLogModal.logs.map((log, index) => (
-                                            <tr key={index} className="hover:bg-[color:var(--surface2)] transition-colors text-[color:var(--text)]">
-                                                <td className="px-5 py-3 font-bold text-[color:var(--accent3)] whitespace-nowrap">{log.taskKey}</td>
-                                                <td className="px-5 py-3 font-medium truncate max-w-[250px]" title={log.title}>{log.title}</td>
+                                            <tr 
+                                                key={index} 
+                                                className="hover:bg-[color:var(--surface2)] transition-colors text-[color:var(--text)] cursor-pointer group"
+                                                onClick={() => {
+                                                    if (onTaskClick && log.fullTask) {
+                                                        onTaskClick(log.fullTask);
+                                                    }
+                                                }}
+                                            >
+                                                <td className="px-5 py-3 font-bold text-[color:var(--accent3)] whitespace-nowrap group-hover:underline underline-offset-2">{log.taskKey}</td>
+                                                <td className="px-5 py-3 font-medium truncate max-w-[250px] group-hover:text-[color:var(--accent)] transition-colors" title={log.title}>{log.title}</td>
                                                 <td className="px-5 py-3 text-[color:var(--muted)] whitespace-nowrap">
                                                     {log.dueDate && !isNaN(log.dueDate) ? log.dueDate.toLocaleDateString('en-GB') : '-'}
                                                 </td>

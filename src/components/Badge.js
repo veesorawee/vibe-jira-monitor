@@ -1,9 +1,8 @@
 import React from 'react';
-import { ChevronsUp, ChevronUp, Minus, ChevronDown, Flame, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ChevronsUp, ChevronUp, Minus, ChevronDown, Flame, CheckCircle2, AlertTriangle, PauseCircle } from 'lucide-react';
 import { parseDate } from '../utils/helpers';
 
 const Badge = ({ type, task }) => {
-    // 🚀 ปรับ Base Classes ให้พอดีกับ Icon อย่างเดียว ถ้าไม่มี Text
     const baseClasses = "inline-flex items-center justify-center font-bold rounded-md border";
 
     if (type === 'priority') {
@@ -29,7 +28,6 @@ const Badge = ({ type, task }) => {
     if (type === 'timeliness') {
         const dueDate = parseDate(task.dueDate);
         
-        // 🚀 ถ้าไม่มี Due Date โชว์แค่ Icon สีเทา
         if (!dueDate) {
             return (
                 <span title="No Due Date" className={`${baseClasses} w-6 h-6 bg-gray-500/10 text-gray-400 border-gray-500/30`}>
@@ -37,11 +35,25 @@ const Badge = ({ type, task }) => {
                 </span>
             );
         }
+
+        // 🚀 บังคับ End of Day
+        dueDate.setHours(23, 59, 59, 999);
         
-        const resolutionDate = parseDate(task.resolutiondate);
-        let isOverdue = resolutionDate ? resolutionDate > dueDate : (new Date().setHours(0,0,0,0) > dueDate);
+        const statusLower = (task.status || '').toLowerCase();
+        const isDone = statusLower.includes('done') || statusLower.includes('cancel');
+        const isHold = statusLower.includes('hold') || statusLower.includes('pending user review');
         
-        // 🚀 โชว์แค่ Icon เปล่าๆ พร้อม Tooltip อธิบายเวลาเอาเมาส์ชี้
+        if (isHold) {
+             return (
+                <span title="On Hold / Pending Review" className={`${baseClasses} w-6 h-6 bg-slate-500/10 text-slate-500 border-slate-500/30`}>
+                    <PauseCircle size={14} />
+                </span>
+            );
+        }
+
+        const resolutionDate = task.resolutiondate ? new Date(task.resolutiondate) : null;
+        let isOverdue = isDone ? (resolutionDate && resolutionDate > dueDate) : (new Date() > dueDate);
+        
         if (isOverdue) {
             return (
                 <span title="Overdue (เลยกำหนดเวลาแล้ว)" className={`${baseClasses} w-6 h-6 bg-red-500/20 text-red-500 border-red-500/50`}>

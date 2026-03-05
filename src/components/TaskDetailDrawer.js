@@ -102,7 +102,8 @@ const TaskDetailDrawer = ({ task, onClose, assigneeColors, biCategoryColors, dep
     };
 
     return (
-        <div className={`fixed inset-0 z-50 transition-opacity ${!!task ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        // 🚀 แก้ z-50 เป็น z-[110] ตรงนี้
+        <div className={`fixed inset-0 z-[110] transition-opacity ${!!task ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div className={`absolute inset-0 bg-black transition-opacity ease-in-out duration-300 ${!!task ? 'bg-opacity-60 backdrop-blur-sm' : 'bg-opacity-0'}`} onClick={onClose}></div>
             
             <div className={`fixed top-0 right-0 h-full bg-[color:var(--surface)] text-[color:var(--text)] border-l border-[color:var(--border)] w-full max-w-2xl shadow-2xl transition-transform transform ease-in-out duration-300 flex flex-col ${!!task ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -138,12 +139,11 @@ const TaskDetailDrawer = ({ task, onClose, assigneeColors, biCategoryColors, dep
                                     </div>
                                     
                                     <div className="grid grid-cols-3 gap-y-6 gap-x-6 text-sm bg-[color:var(--surface)] p-5 rounded-2xl border border-[color:var(--border)] shadow-sm">
-                                        {/* 🚀 ทำให้ชื่อ Assignee สามารถกดเปิด Drawer ได้ */}
                                         <div>
                                             <span className="text-[color:var(--muted)] font-bold text-xs uppercase tracking-wider block mb-1.5">Assignee</span>
                                             <p 
                                                 className="font-semibold flex items-center gap-2 cursor-pointer hover:underline decoration-2 underline-offset-4" 
-                                                onClick={() => openAssigneeDrawer(task.assignee)}
+                                                onClick={() => openAssigneeDrawer && openAssigneeDrawer(task.assignee)}
                                                 style={{ textDecorationColor: assigneeColors[task.assignee] || 'var(--muted)' }}
                                             >
                                                 <span className="w-3 h-3 rounded-full shadow-inner" style={{backgroundColor: assigneeColors[task.assignee] || '#ccc'}}></span>
@@ -157,7 +157,6 @@ const TaskDetailDrawer = ({ task, onClose, assigneeColors, biCategoryColors, dep
                                         <div><span className="text-[color:var(--muted)] font-bold text-xs uppercase tracking-wider block mb-1.5">Due Date</span><p className={`font-semibold ${task.dueDate && !task.resolutiondate && (new Date().setHours(0,0,0,0) > parseDate(task.dueDate)) ? 'text-[color:var(--accent2)]' : 'text-[color:var(--text)]'}`}>{formatDisplayDate(task.dueDate, false)}</p></div>
                                         <div><span className="text-[color:var(--muted)] font-bold text-xs uppercase tracking-wider block mb-1.5">Resolved</span><p className="font-semibold text-[color:var(--text)]">{formatDisplayDate(task.resolutiondate, true)}</p></div>
                                         
-                                        {/* 🚀 ถอด Story Points ออก แล้วเปลี่ยน Last Update มาแทนที่ */}
                                         <div className="col-span-3 border-t border-[color:var(--border)] pt-4 mt-2">
                                             <span className="text-[color:var(--muted)] font-bold text-xs uppercase tracking-wider block mb-1.5">Last Update</span>
                                             <p className="font-semibold text-[color:var(--text)]">{formatDisplayDate(task.lastUpdated, true)}</p>
