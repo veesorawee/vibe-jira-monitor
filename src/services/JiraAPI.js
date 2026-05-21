@@ -1,5 +1,112 @@
 import { adfToHtml, formatDate } from '../utils/helpers';
 
+function markdownToAdf(markdown) {
+    const lines = (markdown || '').split('\n');
+    const content = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Code fence
+        if (line.trimStart().startsWith('```')) {
+            const lang = line.trim().slice(3).trim();
+            const codeLines = [];
+            i++;
+            while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+                codeLines.push(lines[i]);
+                i++;
+            }
+            if (codeLines.length > 0) {
+                content.push({
+                    type: 'codeBlock',
+                    attrs: lang ? { language: lang } : {},
+                    content: [{ type: 'text', text: codeLines.join('\n') }],
+                });
+            }
+            i++;
+            continue;
+        }
+
+        // Heading
+        const hm = line.match(/^(#{1,6})\s+(.*)/);
+        if (hm) {
+            content.push({
+                type: 'heading',
+                attrs: { level: hm[1].length },
+                content: [{ type: 'text', text: hm[2] }],
+            });
+            i++;
+            continue;
+        }
+
+        // Horizontal rule
+        if (line.match(/^-{3,}$/) || line.match(/^\*{3,}$/)) {
+            content.push({ type: 'rule' });
+            i++;
+            continue;
+        }
+
+        // Bullet list (collect consecutive items)
+        if (line.match(/^[-*]\s/)) {
+            const items = [];
+            while (i < lines.length && lines[i].match(/^[-*]\s/)) {
+                items.push({
+                    type: 'listItem',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: lines[i].replace(/^[-*]\s+/, '') }] }],
+                });
+                i++;
+            }
+            content.push({ type: 'bulletList', content: items });
+            continue;
+        }
+
+        // Ordered list
+        if (line.match(/^\d+\.\s/)) {
+            const items = [];
+            while (i < lines.length && lines[i].match(/^\d+\.\s/)) {
+                items.push({
+                    type: 'listItem',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: lines[i].replace(/^\d+\.\s+/, '') }] }],
+                });
+                i++;
+            }
+            content.push({ type: 'orderedList', content: items });
+            continue;
+        }
+
+        // Empty line – skip
+        if (!line.trim()) { i++; continue; }
+
+        // Paragraph – collect until blank/structural line
+        const paraLines = [];
+        while (
+            i < lines.length &&
+            lines[i].trim() &&
+            !lines[i].startsWith('#') &&
+            !lines[i].trimStart().startsWith('```') &&
+            !lines[i].match(/^[-*]\s/) &&
+            !lines[i].match(/^\d+\.\s/) &&
+            !lines[i].match(/^-{3,}$/)
+        ) {
+            paraLines.push(lines[i]);
+            i++;
+        }
+        if (paraLines.length > 0) {
+            content.push({
+                type: 'paragraph',
+                content: [{ type: 'text', text: paraLines.join(' ') }],
+            });
+        }
+    }
+
+    if (content.length === 0) {
+        content.push({ type: 'paragraph', content: [{ type: 'text', text: '' }] });
+    }
+
+    return { type: 'doc', version: 1, content };
+}
+
 class JiraAPI {
     constructor() {
         this.proxyURL = 'http://localhost:4000/api/jira';
@@ -174,23 +281,7 @@ class JiraAPI {
     }
 
     async addComment(issueId, comment) {
-        const body = {
-            body: {
-                type: "doc",
-                version: 1,
-                content: [
-                    {
-                        type: "paragraph",
-                        content: [
-                            {
-                                type: "text",
-                                text: comment
-                            }
-                        ]
-                    }
-                ]
-            }
-        };
+        const body = { body: markdownToAdf(comment) };
 
         const response = await fetch(`${this.proxyURL}/issue/${issueId}/comment`, {
             method: 'POST',

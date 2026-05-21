@@ -24,3 +24,9 @@ yarn-debug.log*
 yarn-error.log*
 
 test-auth.js
+
+# Agent run history (may contain sensitive query results)
+.claude/task-history/
+.claude/agent-history.jsonl
+*.sql
+*.csv

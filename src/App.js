@@ -3,6 +3,7 @@ import { Filter, Search, RefreshCw, Settings, TrendingUp, LayoutDashboard, Table
 import { LineChart as RechartsLineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 import useJira from './hooks/useJira';
+import useAgents from './hooks/useAgents';
 import { parseDate, formatDateForInput, formatAssigneeName } from './utils/helpers';
 
 import MultiSelectDropdown from './components/MultiSelectDropdown';
@@ -14,6 +15,7 @@ import ConfigModal from './components/ConfigModal';
 import CreateTaskModal from './components/CreateTaskModal';
 import Badge from './components/Badge';
 import TaskFlowView from './components/TaskFlowView';
+import AgentDock from './components/AgentDock';
 
 import ManagerDashboard from './components/ManagerDashboard';
 import TableView from './components/TableView';
@@ -23,6 +25,21 @@ import TeamView from './components/TeamView'; // 🚀 Import TeamView เข้�
 
 export default function App() {
     const { allTasks, setAllTasks, loading, error, isConnected, lastRefreshTime, jiraConfig, saveJiraConfig, loadJiraData, jiraAPI } = useJira();
+    const { agents, runAgent, stopAgent, removeAgent, markNotified, markPosted, markDenied } = useAgents();
+
+    const handlePostAgentResult = useCallback(async (agentId, userComment) => {
+        const agent = agents.find(a => a.id === agentId);
+        if (!agent?.result?.text) return;
+        const fullText = userComment?.trim()
+            ? `${agent.result.text}\n\n---\n\n${userComment.trim()}`
+            : agent.result.text;
+        await jiraAPI.addComment(agent.taskId, fullText);
+        markPosted(agentId);
+    }, [agents, jiraAPI, markPosted]);
+
+    const handleDenyAgent = useCallback((agentId) => {
+        markDenied(agentId);
+    }, [markDenied]);
     
     const [tasks, setTasks] = useState([]);
     const [filters, setFilters] = useState({ taskName: '', assignee: [], status: [], department: [], labels: [], biCategory: [] });
@@ -436,6 +453,7 @@ export default function App() {
             biCategoryColors={biCategoryColors} 
             assigneeColors={assigneeColors} 
             openTaskDrawer={openDrawer}
+            
         />
     </div>
 )}
@@ -459,12 +477,13 @@ export default function App() {
                 )}
             </main>
             
-            <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onUpdateTask={handleUpdateTask} jiraAPI={jiraAPI} isConnected={isConnected} assignableUsers={projectUsers} currentUser={currentUser} openAssigneeDrawer={openAssigneeDrawer} />
+            <TaskDetailDrawer task={selectedTask} onClose={() => setSelectedTask(null)} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onUpdateTask={handleUpdateTask} jiraAPI={jiraAPI} isConnected={isConnected} assignableUsers={projectUsers} currentUser={currentUser} openAssigneeDrawer={openAssigneeDrawer} onRunAgent={runAgent} agents={agents} onStopAgent={stopAgent} onPostResult={handlePostAgentResult} onDenyResult={handleDenyAgent} />
             <TaskListDrawer isOpen={drawerState.isOpen} onClose={closeDrawer} assigneeColors={assigneeColors} title={drawerState.title} tasks={drawerState.tasks} onTaskClick={(task) => { handleTaskClick(task); closeDrawer(); }}/>
             <AssigneeChartDrawer isOpen={assigneeChartDrawer.isOpen} onClose={closeAssigneeChartDrawer} assigneeName={assigneeChartDrawer.assigneeName} tasks={assigneeChartDrawer.tasks} departmentColors={departmentColors} biCategoryColors={biCategoryColors} onTaskClick={(task) => { closeAssigneeChartDrawer(); handleTaskClick(task); }}/>
             <LabelChartDrawer isOpen={labelChartDrawer.isOpen} onClose={closeLabelChartDrawer} labelName={labelChartDrawer.labelName} tasks={labelChartDrawer.tasks} assigneeColors={assigneeColors} biCategoryColors={biCategoryColors} departmentColors={departmentColors} onTaskClick={(task) => { closeLabelChartDrawer(); handleTaskClick(task); }}/>
             <ConfigModal isOpen={showConfig} onClose={() => setShowConfig(false)} jiraConfig={jiraConfig} saveJiraConfig={saveJiraConfig} isConnected={isConnected} />
             <CreateTaskModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} onSubmit={handleCreateTask} projectKey={jiraConfig.projectKey} currentUser={currentUser} assignableUsers={projectUsers} departmentOptions={allDepartments} biCategoryOptions={staticBiCategoriesForCreate} />
+            <AgentDock agents={agents} onStop={stopAgent} onRemove={removeAgent} onMarkNotified={markNotified} onPostResult={handlePostAgentResult} onDenyResult={handleDenyAgent} />
         </div>
     );
 }
